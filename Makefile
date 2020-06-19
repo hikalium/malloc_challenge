@@ -9,3 +9,8 @@ run : malloc_challenge.bin
 
 clean :
 	-rm malloc_challenge.bin
+
+commit : 
+	clang-format -i *.c
+	git add .
+	git commit

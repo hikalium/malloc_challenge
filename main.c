@@ -63,8 +63,8 @@
 #include <sys/mman.h>
 #include <sys/time.h>
 
-void* mmap_from_system(size_t size);
-void munmap_to_system(void* ptr, size_t size);
+void *mmap_from_system(size_t size);
+void munmap_to_system(void *ptr, size_t size);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -92,7 +92,7 @@ void munmap_to_system(void* ptr, size_t size);
 //      free list). |next| points to the next free slot.
 typedef struct simple_metadata_t {
   size_t size;
-  struct simple_metadata_t* next;
+  struct simple_metadata_t *next;
 } simple_metadata_t;
 
 // The global information of the simple malloc.
@@ -100,22 +100,22 @@ typedef struct simple_metadata_t {
 //   *  |dummy| is a dummy free slot (only used to make the free list
 //      implementation simpler).
 typedef struct simple_heap_t {
-  simple_metadata_t* free_head;
+  simple_metadata_t *free_head;
   simple_metadata_t dummy;
 } simple_heap_t;
 
 simple_heap_t simple_heap;
 
 // Add a free slot to the beginning of the free list.
-void simple_add_to_free_list(simple_metadata_t* metadata) {
+void simple_add_to_free_list(simple_metadata_t *metadata) {
   assert(!metadata->next);
   metadata->next = simple_heap.free_head;
   simple_heap.free_head = metadata;
 }
 
 // Remove a free slot from the free list.
-void simple_remove_from_free_list(simple_metadata_t* metadata,
-                                  simple_metadata_t* prev) {
+void simple_remove_from_free_list(simple_metadata_t *metadata,
+                                  simple_metadata_t *prev) {
   if (prev) {
     prev->next = metadata->next;
   } else {
@@ -135,9 +135,9 @@ void simple_initialize() {
 // to be a multiple of 8 bytes and meets 8 <= |size| <= 4000. You are not
 // allowed to use any library functions other than mmap_from_system /
 // munmap_to_system.
-void* simple_malloc(size_t size) {
-  simple_metadata_t* metadata = simple_heap.free_head;
-  simple_metadata_t* prev = NULL;
+void *simple_malloc(size_t size) {
+  simple_metadata_t *metadata = simple_heap.free_head;
+  simple_metadata_t *prev = NULL;
   // First-fit: Find the first free slot the object fits.
   while (metadata && metadata->size < size) {
     prev = metadata;
@@ -154,8 +154,8 @@ void* simple_malloc(size_t size) {
     //     <---------------------->
     //            buffer_size
     size_t buffer_size = 4096;
-    simple_metadata_t* metadata =
-        (simple_metadata_t*)mmap_from_system(buffer_size);
+    simple_metadata_t *metadata =
+        (simple_metadata_t *)mmap_from_system(buffer_size);
     metadata->size = buffer_size - sizeof(simple_metadata_t);
     metadata->next = NULL;
     // Add the memory region to the free list.
@@ -169,7 +169,7 @@ void* simple_malloc(size_t size) {
   // ... | metadata | object | ...
   //     ^          ^
   //     metadata   ptr
-  void* ptr = metadata + 1;
+  void *ptr = metadata + 1;
   size_t remaining_size = metadata->size - size;
   metadata->size = size;
   // Remove the free slot from the free list.
@@ -183,7 +183,7 @@ void* simple_malloc(size_t size) {
     //     metadata   ptr      new_metadata
     //                 <------><---------------------->
     //                   size       remaining size
-    simple_metadata_t* new_metadata = (simple_metadata_t*)((char*)ptr + size);
+    simple_metadata_t *new_metadata = (simple_metadata_t *)((char *)ptr + size);
     new_metadata->size = remaining_size - sizeof(simple_metadata_t);
     new_metadata->next = NULL;
     // Add the remaining free slot to the free list.
@@ -194,13 +194,13 @@ void* simple_malloc(size_t size) {
 
 // This is called every time an object is freed.  You are not allowed to use
 // any library functions other than mmap_from_system / munmap_to_system.
-void simple_free(void* ptr) {
+void simple_free(void *ptr) {
   // Look up the metadata. The metadata is placed just prior to the object.
   //
   // ... | metadata | object | ...
   //     ^          ^
   //     metadata   ptr
-  simple_metadata_t* metadata = (simple_metadata_t*)ptr - 1;
+  simple_metadata_t *metadata = (simple_metadata_t *)ptr - 1;
   // Add the free slot to the free list.
   simple_add_to_free_list(metadata);
 }
@@ -219,11 +219,11 @@ void my_initialize();
 // to be a multiple of 8 bytes and meets 8 <= |size| <= 4000. You are not
 // allowed to use any library functions other than mmap_from_system /
 // munmap_to_system.
-void* my_malloc(size_t size);
+void *my_malloc(size_t size);
 
 // This is called every time an object is freed.  You are not allowed to use
 // any library functions other than mmap_from_system / munmap_to_system.
-void my_free(void* ptr);
+void my_free(void *ptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -232,20 +232,7 @@ void my_free(void* ptr);
 //
 // Add test cases in test(). test() is called at the beginning of the program.
 
-void test() {
-  my_initialize();
-  for (int i = 0; i < 100; i++) {
-    void* ptr = my_malloc(96);
-    my_free(ptr);
-  }
-  void* ptrs[100];
-  for (int i = 0; i < 100; i++) {
-    ptrs[i] = my_malloc(96);
-  }
-  for (int i = 0; i < 100; i++) {
-    my_free(ptrs[i]);
-  }
-}
+void test();
 
 ////////////////////////////////////////////////////////////////////////////////
 //               YOU DO NOT NEED TO READ THE CODE BELOW                       //
@@ -255,50 +242,50 @@ void test() {
 
 // Vector
 typedef struct object_t {
-  void* ptr;
+  void *ptr;
   size_t size;
-  char tag;  // A tag to check the object is not broken.
+  char tag; // A tag to check the object is not broken.
 } object_t;
 
 typedef struct vector_t {
   size_t size;
   size_t capacity;
-  object_t* buffer;
+  object_t *buffer;
 } vector_t;
 
-vector_t* vector_create() {
-  vector_t* vector = (vector_t*)malloc(sizeof(vector_t));
+vector_t *vector_create() {
+  vector_t *vector = (vector_t *)malloc(sizeof(vector_t));
   vector->capacity = 0;
   vector->size = 0;
   vector->buffer = NULL;
   return vector;
 }
 
-void vector_push(vector_t* vector, object_t object) {
+void vector_push(vector_t *vector, object_t object) {
   if (vector->size >= vector->capacity) {
     vector->capacity = vector->capacity * 2 + 128;
-    vector->buffer =
-        (object_t*)realloc(vector->buffer, vector->capacity * sizeof(object_t));
+    vector->buffer = (object_t *)realloc(vector->buffer,
+                                         vector->capacity * sizeof(object_t));
   }
   vector->buffer[vector->size] = object;
   vector->size++;
 }
 
-size_t vector_size(vector_t* vector) { return vector->size; }
+size_t vector_size(vector_t *vector) { return vector->size; }
 
-object_t vector_at(vector_t* vector, size_t i) {
+object_t vector_at(vector_t *vector, size_t i) {
   assert(i < vector->size);
   return vector->buffer[i];
 }
 
-void vector_clear(vector_t* vector) {
+void vector_clear(vector_t *vector) {
   free(vector->buffer);
   vector->capacity = 0;
   vector->size = 0;
   vector->buffer = NULL;
 }
 
-void vector_destroy(vector_t* vector) {
+void vector_destroy(vector_t *vector) {
   free(vector->buffer);
   free(vector);
 }
@@ -350,8 +337,8 @@ unsigned get_object_lifetime(unsigned min_epoch, unsigned max_epoch) {
 }
 
 typedef void (*initialize_func_t)();
-typedef void* (*malloc_func_t)(size_t size);
-typedef void (*free_func_t)(void* ptr);
+typedef void *(*malloc_func_t)(size_t size);
+typedef void (*free_func_t)(void *ptr);
 
 // Record the statistics of each challenge.
 typedef struct stats_t {
@@ -378,7 +365,7 @@ void run_challenge(size_t min_size, size_t max_size,
   const int objects_per_epoch_large = 2000;
   char tag = 0;
   // The last entry of the vector is used to store objects that are never freed.
-  vector_t* objects[epochs_per_cycle + 1];
+  vector_t *objects[epochs_per_cycle + 1];
   for (int i = 0; i < epochs_per_cycle + 1; i++) {
     objects[i] = vector_create();
   }
@@ -403,7 +390,7 @@ void run_challenge(size_t min_size, size_t max_size,
         int lifetime = get_object_lifetime(1, epochs_per_cycle);
         stats.allocated_size += size;
         allocated += size;
-        void* ptr = malloc_func(size);
+        void *ptr = malloc_func(size);
         memset(ptr, tag, size);
         object_t object = {ptr, size, tag};
         tag++;
@@ -421,14 +408,14 @@ void run_challenge(size_t min_size, size_t max_size,
       }
 
       // Free objects that are expected to be freed in this epoch.
-      vector_t* vector = objects[epoch];
+      vector_t *vector = objects[epoch];
       for (size_t i = 0; i < vector_size(vector); i++) {
         object_t object = vector_at(vector, i);
         stats.freed_size += object.size;
         freed += object.size;
         // Check that the tag is not broken.
-        if (((char*)object.ptr)[0] != object.tag ||
-            ((char*)object.ptr)[object.size - 1] != object.tag) {
+        if (((char *)object.ptr)[0] != object.tag ||
+            ((char *)object.ptr)[object.size - 1] != object.tag) {
           printf("An allocated object is broken!");
           assert(0);
         }
@@ -457,7 +444,7 @@ void run_challenge(size_t min_size, size_t max_size,
 }
 
 // Print stats
-void print_stats(char* challenge, stats_t simple_stats, stats_t my_stats) {
+void print_stats(char *challenge, stats_t simple_stats, stats_t my_stats) {
   printf("%s: simple malloc => my malloc\n", challenge);
   printf("Time: %.f ms => %.f ms\n",
          (simple_stats.end_time - simple_stats.begin_time) * 1000,
@@ -515,10 +502,10 @@ void run_challenges() {
 
 // Allocate a memory region from the system. |size| needs to be a multiple of
 // 4096 bytes.
-void* mmap_from_system(size_t size) {
+void *mmap_from_system(size_t size) {
   assert(size % 4096 == 0);
   stats.mmap_size += size;
-  void* ptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
+  void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   assert(ptr);
   return ptr;
@@ -526,7 +513,7 @@ void* mmap_from_system(size_t size) {
 
 // Free a memory region [ptr, ptr + size) to the system. |ptr| and |size| needs
 // to be a multiple of 4096 bytes.
-void munmap_to_system(void* ptr, size_t size) {
+void munmap_to_system(void *ptr, size_t size) {
   assert(size % 4096 == 0);
   assert((uintptr_t)(ptr) % 4096 == 0);
   stats.munmap_size += size;
@@ -534,8 +521,8 @@ void munmap_to_system(void* ptr, size_t size) {
   assert(ret != -1);
 }
 
-int main(int argc, char** argv) {
-  srand(12);  // Set the rand seed to make the challenges non-deterministic.
+int main(int argc, char **argv) {
+  srand(12); // Set the rand seed to make the challenges non-deterministic.
   test();
   run_challenges();
   return 0;
