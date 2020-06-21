@@ -205,6 +205,8 @@ void simple_free(void *ptr) {
   simple_add_to_free_list(metadata);
 }
 
+void simple_finalize() {}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //
@@ -224,6 +226,9 @@ void *my_malloc(size_t size);
 // This is called every time an object is freed.  You are not allowed to use
 // any library functions other than mmap_from_system / munmap_to_system.
 void my_free(void *ptr);
+
+// This is called only once at the end of each challenge.
+void my_finalize();
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -339,6 +344,7 @@ unsigned get_object_lifetime(unsigned min_epoch, unsigned max_epoch) {
 typedef void (*initialize_func_t)();
 typedef void *(*malloc_func_t)(size_t size);
 typedef void (*free_func_t)(void *ptr);
+typedef void (*finalize_func_t)();
 
 // Record the statistics of each challenge.
 typedef struct stats_t {
@@ -358,7 +364,7 @@ stats_t stats;
 // |*_func|: Function pointers to initialize / malloc / free.
 void run_challenge(size_t min_size, size_t max_size,
                    initialize_func_t initialize_func, malloc_func_t malloc_func,
-                   free_func_t free_func) {
+                   free_func_t free_func, finalize_func_t finalize_func) {
   const int cycles = 10;
   const int epochs_per_cycle = 100;
   const int objects_per_epoch_small = 100;
@@ -441,6 +447,7 @@ void run_challenge(size_t min_size, size_t max_size,
   for (int i = 0; i < epochs_per_cycle + 1; i++) {
     vector_destroy(objects[i]);
   }
+  finalize_func();
 }
 
 // Print stats
@@ -462,40 +469,46 @@ void run_challenges() {
   stats_t simple_stats, my_stats;
 
   // Warm up run.
-  run_challenge(128, 128, simple_initialize, simple_malloc, simple_free);
+  run_challenge(128, 128, simple_initialize, simple_malloc, simple_free,
+                simple_finalize);
 
   // Challenge 1:
-  run_challenge(128, 128, simple_initialize, simple_malloc, simple_free);
+  run_challenge(128, 128, simple_initialize, simple_malloc, simple_free,
+                simple_finalize);
   simple_stats = stats;
-  run_challenge(128, 128, my_initialize, my_malloc, my_free);
+  run_challenge(128, 128, my_initialize, my_malloc, my_free, my_finalize);
   my_stats = stats;
   print_stats("Challenge 1", simple_stats, my_stats);
 
   // Challenge 2:
-  run_challenge(16, 16, simple_initialize, simple_malloc, simple_free);
+  run_challenge(16, 16, simple_initialize, simple_malloc, simple_free,
+                simple_finalize);
   simple_stats = stats;
-  run_challenge(16, 16, my_initialize, my_malloc, my_free);
+  run_challenge(16, 16, my_initialize, my_malloc, my_free, my_finalize);
   my_stats = stats;
   print_stats("Challenge 2", simple_stats, my_stats);
 
   // Challenge 3:
-  run_challenge(16, 128, simple_initialize, simple_malloc, simple_free);
+  run_challenge(16, 128, simple_initialize, simple_malloc, simple_free,
+                simple_finalize);
   simple_stats = stats;
-  run_challenge(16, 128, my_initialize, my_malloc, my_free);
+  run_challenge(16, 128, my_initialize, my_malloc, my_free, my_finalize);
   my_stats = stats;
   print_stats("Challenge 3", simple_stats, my_stats);
 
   // Challenge 4:
-  run_challenge(256, 4000, simple_initialize, simple_malloc, simple_free);
+  run_challenge(256, 4000, simple_initialize, simple_malloc, simple_free,
+                simple_finalize);
   simple_stats = stats;
-  run_challenge(256, 4000, my_initialize, my_malloc, my_free);
+  run_challenge(256, 4000, my_initialize, my_malloc, my_free, my_finalize);
   my_stats = stats;
   print_stats("Challenge 4", simple_stats, my_stats);
 
   // Challenge 5:
-  run_challenge(8, 4000, simple_initialize, simple_malloc, simple_free);
+  run_challenge(8, 4000, simple_initialize, simple_malloc, simple_free,
+                simple_finalize);
   simple_stats = stats;
-  run_challenge(8, 4000, my_initialize, my_malloc, my_free);
+  run_challenge(8, 4000, my_initialize, my_malloc, my_free, my_finalize);
   my_stats = stats;
   print_stats("Challenge 5", simple_stats, my_stats);
 }
