@@ -110,13 +110,13 @@ void measure_malloc_finalize() {
 typedef struct {
   int64_t used_bitmap;
   int next_slot_cursor;
-} Header128;
+} ChunkHeader;
 typedef struct {
   // bs = 128
   // 4096 / 128 - 1 = 31 slots
-  Header128 **pages;
+  ChunkHeader **pages;
   int pages_used;
-  int pages_capacity; // multiple of (PAGE_SIZE / sizeof(Header128*))
+  int pages_capacity; // multiple of (PAGE_SIZE / sizeof(ChunkHeader*))
   int next_page_cursor;
 } SlotAllocator128;
 
@@ -128,7 +128,7 @@ void v01_malloc_init() {
   malloc128.pages_capacity = 0;
   malloc128.next_page_cursor = 0;
 }
-static int find_empty_index(Header128 *h) {
+static int find_empty_index(ChunkHeader *h) {
   for (int i = h->next_slot_cursor; i < sizeof(h->used_bitmap) * 4; i++) {
     if (((h->used_bitmap >> i) & 1) == 0) {
       h->next_slot_cursor = i;
@@ -138,7 +138,7 @@ static int find_empty_index(Header128 *h) {
   h->next_slot_cursor = sizeof(h->used_bitmap) * 4;
   return -1;
 }
-static void *try_alloc128_from_page(Header128 *h) {
+static void *try_alloc128_from_page(ChunkHeader *h) {
   int empty_slot = find_empty_index(h);
   if (empty_slot == -1) {
     return NULL;
@@ -147,8 +147,8 @@ static void *try_alloc128_from_page(Header128 *h) {
   void *p = (void *)((uint8_t *)h + (empty_slot * 128));
   return p;
 }
-static Header128 *alloc_page128() {
-  Header128 *h = mmap_from_system(PAGE_SIZE);
+static ChunkHeader *alloc_page128() {
+  ChunkHeader *h = mmap_from_system(PAGE_SIZE);
   // Clear to zero
   for (int i = 0; i < PAGE_SIZE / sizeof(uint64_t); i++) {
     ((uint64_t *)h)[i] = 0;
@@ -174,17 +174,17 @@ static void *alloc128() {
     if (malloc128.pages_used == malloc128.pages_capacity) {
       // Expand page list
       const int new_capacity =
-          malloc128.pages_capacity + PAGE_SIZE / sizeof(Header128 *);
-      Header128 **new_pages128 =
-          mmap_from_system(new_capacity * sizeof(Header128 *));
+          malloc128.pages_capacity + PAGE_SIZE / sizeof(ChunkHeader *);
+      ChunkHeader **new_pages128 =
+          mmap_from_system(new_capacity * sizeof(ChunkHeader *));
       memcpy(new_pages128, malloc128.pages,
-             sizeof(Header128 *) * malloc128.pages_capacity);
+             sizeof(ChunkHeader *) * malloc128.pages_capacity);
       empty_slot_idx = malloc128.pages_capacity;
       bzero(&new_pages128[malloc128.pages_capacity],
-            sizeof(Header128 *) * (new_capacity - malloc128.pages_capacity));
+            sizeof(ChunkHeader *) * (new_capacity - malloc128.pages_capacity));
       if (malloc128.pages) {
         munmap_to_system(malloc128.pages,
-                         malloc128.pages_capacity * sizeof(Header128 *));
+                         malloc128.pages_capacity * sizeof(ChunkHeader *));
       }
       malloc128.pages = new_pages128;
       malloc128.pages_capacity = new_capacity;
@@ -198,7 +198,7 @@ static void *alloc128() {
   malloc128.next_page_cursor = empty_slot_idx;
   return try_alloc128_from_page(malloc128.pages[empty_slot_idx]);
 }
-static void free_from_page128(Header128 *h, void *ptr) {
+static void free_from_page128(ChunkHeader *h, void *ptr) {
   int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> 7;
   h->used_bitmap ^= (1ULL << slot);
   if (slot < h->next_slot_cursor) {
@@ -208,7 +208,7 @@ static void free_from_page128(Header128 *h, void *ptr) {
 static bool free128(void *ptr) {
   // retv: ptr is freed or not
   int idx = -1;
-  Header128 *key = (Header128 *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
+  ChunkHeader *key = (ChunkHeader *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
   for (int i = 0; i < malloc128.pages_used; i++) {
     if (malloc128.pages[i] == key) {
       idx = i;
