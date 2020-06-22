@@ -109,6 +109,7 @@ void measure_malloc_finalize() {
 
 typedef struct {
   int64_t used_bitmap;
+  int next_slot_cursor;
 } Header128;
 typedef struct {
   // bs = 128
@@ -128,10 +129,13 @@ void v01_malloc_init() {
   malloc128.next_page_cursor = 0;
 }
 static int find_empty_index(Header128 *h) {
-  for (int i = 0; i < sizeof(h->used_bitmap) * 8; i++) {
-    if (((h->used_bitmap >> i) & 1) == 0)
+  for (int i = h->next_slot_cursor; i < sizeof(h->used_bitmap) * 4; i++) {
+    if (((h->used_bitmap >> i) & 1) == 0) {
+      h->next_slot_cursor = i;
       return i;
+    }
   }
+  h->next_slot_cursor = sizeof(h->used_bitmap) * 4;
   return -1;
 }
 static void *try_alloc128_from_page(Header128 *h) {
@@ -197,6 +201,9 @@ static void *alloc128() {
 static void free_from_page128(Header128 *h, void *ptr) {
   int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> 7;
   h->used_bitmap ^= (1ULL << slot);
+  if (slot < h->next_slot_cursor) {
+    h->next_slot_cursor = slot;
+  }
 }
 static bool free128(void *ptr) {
   // retv: ptr is freed or not
