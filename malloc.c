@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 void *mmap_from_system(size_t size);
 void munmap_to_system(void *ptr, size_t size);
@@ -115,6 +116,7 @@ typedef struct {
   Header128 **pages;
   int pages_used;
   int pages_capacity; // multiple of (PAGE_SIZE / sizeof(Header128*))
+  int next_page_cursor;
 } SlotAllocator128;
 
 SlotAllocator128 malloc128;
@@ -123,6 +125,7 @@ void v01_malloc_init() {
   malloc128.pages = NULL;
   malloc128.pages_used = 0;
   malloc128.pages_capacity = 0;
+  malloc128.next_page_cursor = 0;
 }
 static int find_empty_index(Header128 *h) {
   for (int i = 0; i < sizeof(h->used_bitmap) * 8; i++) {
@@ -153,12 +156,13 @@ static Header128 *alloc_page128() {
 static void *alloc128() {
   void *p;
   int empty_slot_idx = -1;
-  for (int i = 0; i < malloc128.pages_used; i++) {
-    if (!malloc128.pages[i]) {
+  for (int i = malloc128.next_page_cursor; i < malloc128.pages_used; i++) {
+    if (empty_slot_idx == -1 && !malloc128.pages[i]) {
       empty_slot_idx = i;
       continue;
     }
     if ((p = try_alloc128_from_page(malloc128.pages[i]))) {
+      malloc128.next_page_cursor = i;
       return p;
     }
   }
@@ -169,14 +173,11 @@ static void *alloc128() {
           malloc128.pages_capacity + PAGE_SIZE / sizeof(Header128 *);
       Header128 **new_pages128 =
           mmap_from_system(new_capacity * sizeof(Header128 *));
-      int i;
-      for (i = 0; i < malloc128.pages_capacity; i++) {
-        new_pages128[i] = malloc128.pages[i];
-      }
-      empty_slot_idx = i;
-      for (; i < new_capacity; i++) {
-        new_pages128[i] = NULL;
-      }
+      memcpy(new_pages128, malloc128.pages,
+             sizeof(Header128 *) * malloc128.pages_capacity);
+      empty_slot_idx = malloc128.pages_capacity;
+      bzero(&new_pages128[malloc128.pages_capacity],
+            sizeof(Header128 *) * (new_capacity - malloc128.pages_capacity));
       if (malloc128.pages) {
         munmap_to_system(malloc128.pages,
                          malloc128.pages_capacity * sizeof(Header128 *));
@@ -190,6 +191,7 @@ static void *alloc128() {
   }
   assert(!malloc128.pages[empty_slot_idx]);
   malloc128.pages[empty_slot_idx] = alloc_page128();
+  malloc128.next_page_cursor = empty_slot_idx;
   return try_alloc128_from_page(malloc128.pages[empty_slot_idx]);
 }
 static void free_from_page128(Header128 *h, void *ptr) {
@@ -208,6 +210,9 @@ static bool free128(void *ptr) {
   }
   if (idx == -1) {
     return false;
+  }
+  if (idx < malloc128.next_page_cursor) {
+    malloc128.next_page_cursor = idx;
   }
   free_from_page128(malloc128.pages[idx], ptr);
   return true;
