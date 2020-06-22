@@ -107,19 +107,22 @@ void measure_malloc_finalize() {
 //
 
 typedef struct {
-  // 4096 / 128 - 1 = 31 slots
   int64_t used_bitmap;
-  // 128 = 2 ^ 7
 } Header128;
+typedef struct {
+  // bs = 128
+  // 4096 / 128 - 1 = 31 slots
+  Header128 **pages;
+  int pages_used;
+  int pages_capacity; // multiple of (PAGE_SIZE / sizeof(Header128*))
+} SlotAllocator128;
 
-Header128 **pages128;
-int pages128_used;
-int pages128_capacity; // multiple of (PAGE_SIZE / sizeof(Header128*))
+SlotAllocator128 malloc128;
 
 void v01_malloc_init() {
-  pages128 = NULL;
-  pages128_used = 0;
-  pages128_capacity = 0;
+  malloc128.pages = NULL;
+  malloc128.pages_used = 0;
+  malloc128.pages_capacity = 0;
 }
 static int find_empty_index(Header128 *h) {
   for (int i = 0; i < sizeof(h->used_bitmap) * 8; i++) {
@@ -150,43 +153,44 @@ static Header128 *alloc_page128() {
 static void *alloc128() {
   void *p;
   int empty_slot_idx = -1;
-  for (int i = 0; i < pages128_used; i++) {
-    if (!pages128[i]) {
+  for (int i = 0; i < malloc128.pages_used; i++) {
+    if (!malloc128.pages[i]) {
       empty_slot_idx = i;
       continue;
     }
-    if ((p = try_alloc128_from_page(pages128[i]))) {
+    if ((p = try_alloc128_from_page(malloc128.pages[i]))) {
       return p;
     }
   }
   if (empty_slot_idx == -1) {
-    if (pages128_used == pages128_capacity) {
+    if (malloc128.pages_used == malloc128.pages_capacity) {
       // Expand page list
       const int new_capacity =
-          pages128_capacity + PAGE_SIZE / sizeof(Header128 *);
+          malloc128.pages_capacity + PAGE_SIZE / sizeof(Header128 *);
       Header128 **new_pages128 =
           mmap_from_system(new_capacity * sizeof(Header128 *));
       int i;
-      for (i = 0; i < pages128_capacity; i++) {
-        new_pages128[i] = pages128[i];
+      for (i = 0; i < malloc128.pages_capacity; i++) {
+        new_pages128[i] = malloc128.pages[i];
       }
       empty_slot_idx = i;
       for (; i < new_capacity; i++) {
         new_pages128[i] = NULL;
       }
-      if (pages128) {
-        munmap_to_system(pages128, pages128_capacity * sizeof(Header128 *));
+      if (malloc128.pages) {
+        munmap_to_system(malloc128.pages,
+                         malloc128.pages_capacity * sizeof(Header128 *));
       }
-      pages128 = new_pages128;
-      pages128_capacity = new_capacity;
+      malloc128.pages = new_pages128;
+      malloc128.pages_capacity = new_capacity;
     }
-    assert(pages128_used < pages128_capacity);
-    empty_slot_idx = pages128_used;
-    pages128_used++;
+    assert(malloc128.pages_used < malloc128.pages_capacity);
+    empty_slot_idx = malloc128.pages_used;
+    malloc128.pages_used++;
   }
-  assert(!pages128[empty_slot_idx]);
-  pages128[empty_slot_idx] = alloc_page128();
-  return try_alloc128_from_page(pages128[empty_slot_idx]);
+  assert(!malloc128.pages[empty_slot_idx]);
+  malloc128.pages[empty_slot_idx] = alloc_page128();
+  return try_alloc128_from_page(malloc128.pages[empty_slot_idx]);
 }
 static void free_from_page128(Header128 *h, void *ptr) {
   int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> 7;
@@ -196,8 +200,8 @@ static bool free128(void *ptr) {
   // retv: ptr is freed or not
   int idx = -1;
   Header128 *key = (Header128 *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
-  for (int i = 0; i < pages128_used; i++) {
-    if (pages128[i] == key) {
+  for (int i = 0; i < malloc128.pages_used; i++) {
+    if (malloc128.pages[i] == key) {
       idx = i;
       break;
     }
@@ -205,7 +209,7 @@ static bool free128(void *ptr) {
   if (idx == -1) {
     return false;
   }
-  free_from_page128(pages128[idx], ptr);
+  free_from_page128(malloc128.pages[idx], ptr);
   return true;
 };
 void *v01_malloc_alloc(size_t size) {
