@@ -23,9 +23,9 @@ typedef struct {
   int64_t pages_used;
   int64_t pages_capacity; // multiple of (PAGE_SIZE / sizeof(ChunkHeader*))
   int64_t next_page_cursor;
-} SlotAllocator128;
+} SlotAllocator;
 
-SlotAllocator128 malloc128;
+SlotAllocator sa128;
 
 static int SA128_FindEmptyIndex(ChunkHeader *h) {
   for (int i = h->next_slot_cursor; i < sizeof(h->used_bitmap) * 4; i++) {
@@ -59,46 +59,46 @@ static ChunkHeader *SA128_AllocPage() {
 static void *SA128_Alloc() {
   void *p;
   int empty_slot_idx = -1;
-  for (int i = malloc128.next_page_cursor; i < malloc128.pages_used; i++) {
-    if (empty_slot_idx == -1 && !malloc128.pages[i]) {
+  for (int i = sa128.next_page_cursor; i < sa128.pages_used; i++) {
+    if (empty_slot_idx == -1 && !sa128.pages[i]) {
       empty_slot_idx = i;
       continue;
     }
-    if ((p = SA128_TryAllocFromPage(malloc128.pages[i]))) {
-      malloc128.next_page_cursor = i;
+    if ((p = SA128_TryAllocFromPage(sa128.pages[i]))) {
+      sa128.next_page_cursor = i;
       return p;
     }
   }
   if (empty_slot_idx == -1) {
-    if (malloc128.pages_used == malloc128.pages_capacity) {
+    if (sa128.pages_used == sa128.pages_capacity) {
       // Expand page list
       const int new_capacity =
-          malloc128.pages_capacity + PAGE_SIZE / sizeof(ChunkHeader *);
+          sa128.pages_capacity + PAGE_SIZE / sizeof(ChunkHeader *);
       ChunkHeader **new_pages128 =
           mmap_from_system(new_capacity * sizeof(ChunkHeader *));
-      memcpy(new_pages128, malloc128.pages,
-             sizeof(ChunkHeader *) * malloc128.pages_capacity);
-      empty_slot_idx = malloc128.pages_capacity;
-      bzero(&new_pages128[malloc128.pages_capacity],
-            sizeof(ChunkHeader *) * (new_capacity - malloc128.pages_capacity));
-      if (malloc128.pages) {
-        munmap_to_system(malloc128.pages,
-                         malloc128.pages_capacity * sizeof(ChunkHeader *));
+      memcpy(new_pages128, sa128.pages,
+             sizeof(ChunkHeader *) * sa128.pages_capacity);
+      empty_slot_idx = sa128.pages_capacity;
+      bzero(&new_pages128[sa128.pages_capacity],
+            sizeof(ChunkHeader *) * (new_capacity - sa128.pages_capacity));
+      if (sa128.pages) {
+        munmap_to_system(sa128.pages,
+                         sa128.pages_capacity * sizeof(ChunkHeader *));
       }
-      malloc128.pages = new_pages128;
-      malloc128.pages_capacity = new_capacity;
+      sa128.pages = new_pages128;
+      sa128.pages_capacity = new_capacity;
     }
-    assert(malloc128.pages_used < malloc128.pages_capacity);
-    empty_slot_idx = malloc128.pages_used;
-    malloc128.pages_used++;
+    assert(sa128.pages_used < sa128.pages_capacity);
+    empty_slot_idx = sa128.pages_used;
+    sa128.pages_used++;
   }
-  assert(!malloc128.pages[empty_slot_idx]);
-  malloc128.pages[empty_slot_idx] = SA128_AllocPage();
-  malloc128.next_page_cursor = empty_slot_idx;
-  return SA128_TryAllocFromPage(malloc128.pages[empty_slot_idx]);
+  assert(!sa128.pages[empty_slot_idx]);
+  sa128.pages[empty_slot_idx] = SA128_AllocPage();
+  sa128.next_page_cursor = empty_slot_idx;
+  return SA128_TryAllocFromPage(sa128.pages[empty_slot_idx]);
 }
 static void SA128_FreeFromPage(int page_idx, void *ptr) {
-  ChunkHeader *h = malloc128.pages[page_idx];
+  ChunkHeader *h = sa128.pages[page_idx];
   int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> 7;
   h->used_bitmap ^= (1ULL << slot);
   if (slot < h->next_slot_cursor) {
@@ -109,8 +109,8 @@ static bool SA128_Free(void *ptr) {
   // retv: ptr is freed or not
   int idx = -1;
   ChunkHeader *key = (ChunkHeader *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
-  for (int i = 0; i < malloc128.pages_used; i++) {
-    if (malloc128.pages[i] == key) {
+  for (int i = 0; i < sa128.pages_used; i++) {
+    if (sa128.pages[i] == key) {
       idx = i;
       break;
     }
@@ -118,8 +118,8 @@ static bool SA128_Free(void *ptr) {
   if (idx == -1) {
     return false;
   }
-  if (idx < malloc128.next_page_cursor) {
-    malloc128.next_page_cursor = idx;
+  if (idx < sa128.next_page_cursor) {
+    sa128.next_page_cursor = idx;
   }
   SA128_FreeFromPage(idx, ptr);
   return true;
@@ -131,10 +131,10 @@ static bool SA128_Free(void *ptr) {
 
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
-  malloc128.pages = NULL;
-  malloc128.pages_used = 0;
-  malloc128.pages_capacity = 0;
-  malloc128.next_page_cursor = 0;
+  sa128.pages = NULL;
+  sa128.pages_used = 0;
+  sa128.pages_capacity = 0;
+  sa128.next_page_cursor = 0;
 }
 
 // This is called every time an object is allocated. |size| is guaranteed
