@@ -13,7 +13,7 @@ void munmap_to_system(void *ptr, size_t size);
 #define PAGE_SIZE 4096ULL
 
 typedef struct {
-  int64_t used_bitmap;
+  int64_t used_bitmap[2];
   int next_slot_cursor;
 } ChunkHeader;
 typedef struct {
@@ -52,24 +52,36 @@ void SAExpandPageListIfNeeded(SlotAllocator *sa) {
   sa->pages = new_pages;
   sa->pages_capacity = new_capacity;
 }
-static int FindEmptyIndex(ChunkHeader *h) {
-  // This function supports up to 64 slots
-  for (int i = h->next_slot_cursor; i < sizeof(h->used_bitmap) * 8; i++) {
-    if (((h->used_bitmap >> i) & 1) == 0) {
-      h->next_slot_cursor = i;
+static int CHReadUsedBitmap(ChunkHeader *ch, int i) {
+  return ((ch->used_bitmap[i / 64] >> (i % 64)) & 1);
+}
+static void CHSetUsedBitmap(ChunkHeader *ch, int i) {
+  ch->used_bitmap[i / 64] |= (1ULL << (i % 64));
+}
+static void CHClearUsedBitmap(ChunkHeader *ch, int i) {
+  ch->used_bitmap[i / 64] &= ~(1ULL << (i % 64));
+}
+static void CHSetAllUsedBitmap(ChunkHeader *ch) {
+  ch->used_bitmap[0] = ~0ULL;
+  ch->used_bitmap[1] = ~0ULL;
+}
+static int FindEmptyIndex(ChunkHeader *ch) {
+  for (int i = ch->next_slot_cursor; i < sizeof(ch->used_bitmap) * 8; i++) {
+    if (!CHReadUsedBitmap(ch, i)) {
+      ch->next_slot_cursor = i;
       return i;
     }
   }
-  h->next_slot_cursor = sizeof(h->used_bitmap) * 4;
+  ch->next_slot_cursor = sizeof(ch->used_bitmap) * 8;
   return -1;
 }
-static void *TryAllocFromPage(ChunkHeader *h, int slot_size) {
-  int empty_slot = FindEmptyIndex(h);
+static void *TryAllocFromPage(ChunkHeader *ch, int slot_size) {
+  int empty_slot = FindEmptyIndex(ch);
   if (empty_slot == -1) {
     return NULL;
   }
-  h->used_bitmap |= (1ULL << empty_slot);
-  void *p = (void *)((uint8_t *)h + (empty_slot * slot_size));
+  CHSetUsedBitmap(ch, empty_slot);
+  void *p = (void *)((uint8_t *)ch + (empty_slot * slot_size));
   return p;
 }
 static void *TryAllocFromExistedPages(SlotAllocator *sa, int *empty_slot_idx,
@@ -87,33 +99,30 @@ static void *TryAllocFromExistedPages(SlotAllocator *sa, int *empty_slot_idx,
   }
   return NULL;
 }
-static ChunkHeader *AllocPageForSlotAllocator(int slots, int slots_for_header) {
+static ChunkHeader *AllocPageForSlotAllocator(int slot_size, int slots,
+                                              int slots_for_header) {
   // This function supports up to 64 slots
-  assert(slots <= 64);
-  assert(slots_for_header <= 64 &&
-         sizeof(ChunkHeader) <= PAGE_SIZE / slots * slots_for_header);
-  ChunkHeader *h = mmap_from_system(PAGE_SIZE);
+  assert(slots <= 128);
+  assert(slots_for_header <= 128 &&
+         sizeof(ChunkHeader) <= (slot_size * slots_for_header));
+  ChunkHeader *ch = mmap_from_system(PAGE_SIZE);
   // Clear to zero
   for (int i = 0; i < PAGE_SIZE / sizeof(uint64_t); i++) {
-    ((uint64_t *)h)[i] = 0;
+    ((uint64_t *)ch)[i] = 0;
   }
   // Mark first slot is allocated (for metadata)
-  if (slots == 64) {
-    h->used_bitmap = ~0ULL;
-  } else {
-    h->used_bitmap = (1ULL << slots) - 1;
+  CHSetAllUsedBitmap(ch);
+  for (int i = slots_for_header; i < slots; i++) {
+    CHClearUsedBitmap(ch, i);
   }
-  h->used_bitmap ^= (1ULL << slots_for_header) - 1;
-  h->used_bitmap = ~h->used_bitmap;
-  return h;
+  return ch;
 }
 
 #define SA16_LOG2_OF_SLOT_SIZE 4
 #define SA16_SLOT_SIZE (1ULL << SA16_LOG2_OF_SLOT_SIZE)
-//#define SA16_NUM_OF_SLOTS (PAGE_SIZE >> SA16_LOG2_OF_SLOT_SIZE)
-#define SA16_NUM_OF_SLOTS                                                      \
-  64 // TODO: support slots more than 64 (this should be 128)
-#define SA16_NUM_OF_SLOTS_RESERVED 1
+// #define SA16_NUM_OF_SLOTS (PAGE_SIZE >> SA16_LOG2_OF_SLOT_SIZE)
+#define SA16_NUM_OF_SLOTS 128
+#define SA16_NUM_OF_SLOTS_RESERVED 2
 static void *SA16_Alloc() {
   int empty_slot_idx = -1;
   void *p = TryAllocFromExistedPages(&sa16, &empty_slot_idx, 16);
@@ -128,8 +137,8 @@ static void *SA16_Alloc() {
     sa16.pages_used++;
   }
   assert(!sa16.pages[empty_slot_idx]);
-  sa16.pages[empty_slot_idx] =
-      AllocPageForSlotAllocator(SA16_NUM_OF_SLOTS, SA16_NUM_OF_SLOTS_RESERVED);
+  sa16.pages[empty_slot_idx] = AllocPageForSlotAllocator(
+      SA16_SLOT_SIZE, SA16_NUM_OF_SLOTS, SA16_NUM_OF_SLOTS_RESERVED);
   sa16.next_page_cursor = empty_slot_idx;
   return TryAllocFromPage(sa16.pages[empty_slot_idx], SA16_SLOT_SIZE);
 }
@@ -149,17 +158,17 @@ static void *SA128_Alloc() {
     sa128.pages_used++;
   }
   assert(!sa128.pages[empty_slot_idx]);
-  sa128.pages[empty_slot_idx] = AllocPageForSlotAllocator(32, 1);
+  sa128.pages[empty_slot_idx] = AllocPageForSlotAllocator(128, 32, 1);
   sa128.next_page_cursor = empty_slot_idx;
   return TryAllocFromPage(sa128.pages[empty_slot_idx], 128);
 }
 static void SAFreeFromPage(SlotAllocator *sa, int page_idx, void *ptr,
                            int log2_slot_size) {
-  ChunkHeader *h = sa->pages[page_idx];
+  ChunkHeader *ch = sa->pages[page_idx];
   int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> log2_slot_size;
-  h->used_bitmap ^= (1ULL << slot);
-  if (slot < h->next_slot_cursor) {
-    h->next_slot_cursor = slot;
+  CHClearUsedBitmap(ch, slot);
+  if (slot < ch->next_slot_cursor) {
+    ch->next_slot_cursor = slot;
   }
 }
 static bool SA128_Free(void *ptr) {
