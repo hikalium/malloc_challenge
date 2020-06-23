@@ -97,7 +97,8 @@ static void *SA128_Alloc() {
   malloc128.next_page_cursor = empty_slot_idx;
   return SA128_TryAllocFromPage(malloc128.pages[empty_slot_idx]);
 }
-static void SA128_FreeFromPage(ChunkHeader *h, void *ptr) {
+static void SA128_FreeFromPage(int page_idx, void *ptr) {
+  ChunkHeader *h = malloc128.pages[page_idx];
   int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> 7;
   h->used_bitmap ^= (1ULL << slot);
   if (slot < h->next_slot_cursor) {
@@ -120,7 +121,7 @@ static bool SA128_Free(void *ptr) {
   if (idx < malloc128.next_page_cursor) {
     malloc128.next_page_cursor = idx;
   }
-  SA128_FreeFromPage(malloc128.pages[idx], ptr);
+  SA128_FreeFromPage(idx, ptr);
   return true;
 };
 
