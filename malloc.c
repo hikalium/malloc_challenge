@@ -34,9 +34,9 @@ void InitSlotAllocator(SlotAllocator *sa) {
   sa->pages_capacity = 0;
   sa->next_page_cursor = 0;
 }
-
-static int SA128_FindEmptyIndex(ChunkHeader *h) {
-  for (int i = h->next_slot_cursor; i < sizeof(h->used_bitmap) * 4; i++) {
+static int FindEmptyIndex(ChunkHeader *h) {
+  // This function supports up to 64 slots
+  for (int i = h->next_slot_cursor; i < sizeof(h->used_bitmap) * 8; i++) {
     if (((h->used_bitmap >> i) & 1) == 0) {
       h->next_slot_cursor = i;
       return i;
@@ -45,37 +45,47 @@ static int SA128_FindEmptyIndex(ChunkHeader *h) {
   h->next_slot_cursor = sizeof(h->used_bitmap) * 4;
   return -1;
 }
-static void *SA128_TryAllocFromPage(ChunkHeader *h) {
-  int empty_slot = SA128_FindEmptyIndex(h);
+static void *TryAllocFromPage(ChunkHeader *h, int slot_size) {
+  int empty_slot = FindEmptyIndex(h);
   if (empty_slot == -1) {
     return NULL;
   }
   h->used_bitmap |= (1ULL << empty_slot);
-  void *p = (void *)((uint8_t *)h + (empty_slot * 128));
+  void *p = (void *)((uint8_t *)h + (empty_slot * slot_size));
   return p;
 }
-static ChunkHeader *SA128_AllocPage() {
+static void *TryAllocFromExistedPages(SlotAllocator *sa, int *empty_slot_idx,
+                                      int slot_size) {
+  for (int i = sa->next_page_cursor; i < sa->pages_used; i++) {
+    if (*empty_slot_idx == -1 && !sa->pages[i]) {
+      *empty_slot_idx = i;
+      continue;
+    }
+    void *p;
+    if ((p = TryAllocFromPage(sa->pages[i], slot_size))) {
+      sa->next_page_cursor = i;
+      return p;
+    }
+  }
+  return NULL;
+}
+static ChunkHeader *AllocPageForSlotAllocator(int slots, int slots_for_header) {
+  // This function supports up to 64 slots
   ChunkHeader *h = mmap_from_system(PAGE_SIZE);
   // Clear to zero
   for (int i = 0; i < PAGE_SIZE / sizeof(uint64_t); i++) {
     ((uint64_t *)h)[i] = 0;
   }
   // Mark first slot is allocated (for metadata)
-  h->used_bitmap = ~((1ULL << 32) - 2);
+  h->used_bitmap = ~(((1ULL << slots) - 1) ^ ((1ULL << slots_for_header) - 1));
   return h;
 }
 static void *SA128_Alloc() {
-  void *p;
   int empty_slot_idx = -1;
-  for (int i = sa128.next_page_cursor; i < sa128.pages_used; i++) {
-    if (empty_slot_idx == -1 && !sa128.pages[i]) {
-      empty_slot_idx = i;
-      continue;
-    }
-    if ((p = SA128_TryAllocFromPage(sa128.pages[i]))) {
-      sa128.next_page_cursor = i;
-      return p;
-    }
+  void *p = TryAllocFromExistedPages(&sa128, &empty_slot_idx, 128);
+  if (p) {
+    // Found an empty slot in allocated pages.
+    return p;
   }
   if (empty_slot_idx == -1) {
     if (sa128.pages_used == sa128.pages_capacity) {
@@ -101,9 +111,9 @@ static void *SA128_Alloc() {
     sa128.pages_used++;
   }
   assert(!sa128.pages[empty_slot_idx]);
-  sa128.pages[empty_slot_idx] = SA128_AllocPage();
+  sa128.pages[empty_slot_idx] = AllocPageForSlotAllocator(32, 1);
   sa128.next_page_cursor = empty_slot_idx;
-  return SA128_TryAllocFromPage(sa128.pages[empty_slot_idx]);
+  return TryAllocFromPage(sa128.pages[empty_slot_idx], 128);
 }
 static void SA128_FreeFromPage(int page_idx, void *ptr) {
   ChunkHeader *h = sa128.pages[page_idx];
