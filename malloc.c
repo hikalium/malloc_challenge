@@ -25,7 +25,15 @@ typedef struct {
   int64_t next_page_cursor;
 } SlotAllocator;
 
+SlotAllocator sa16;
 SlotAllocator sa128;
+
+void InitSlotAllocator(SlotAllocator *sa) {
+  sa->pages = NULL;
+  sa->pages_used = 0;
+  sa->pages_capacity = 0;
+  sa->next_page_cursor = 0;
+}
 
 static int SA128_FindEmptyIndex(ChunkHeader *h) {
   for (int i = h->next_slot_cursor; i < sizeof(h->used_bitmap) * 4; i++) {
@@ -131,10 +139,8 @@ static bool SA128_Free(void *ptr) {
 
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
-  sa128.pages = NULL;
-  sa128.pages_used = 0;
-  sa128.pages_capacity = 0;
-  sa128.next_page_cursor = 0;
+  InitSlotAllocator(&sa16);
+  InitSlotAllocator(&sa128);
 }
 
 // This is called every time an object is allocated. |size| is guaranteed
