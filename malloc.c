@@ -28,6 +28,7 @@ typedef struct {
   int log2_of_slot_size;
   int slot_size;
   int num_of_slots;
+  int num_of_slots_reserved;
 } SlotAllocator;
 
 SlotAllocator sa16;
@@ -41,6 +42,8 @@ void InitSlotAllocator(SlotAllocator *sa, int log2_of_slot_size) {
   sa->log2_of_slot_size = log2_of_slot_size;
   sa->slot_size = 1ULL << log2_of_slot_size;
   sa->num_of_slots = PAGE_SIZE >> log2_of_slot_size;
+  sa->num_of_slots_reserved =
+      (sizeof(ChunkHeader) + sa->slot_size - 1) / sa->slot_size;
 }
 void SAExpandPageListIfNeeded(SlotAllocator *sa) {
   if (sa->pages_used < sa->pages_capacity) {
@@ -155,7 +158,6 @@ static bool SAFree(SlotAllocator *sa, void *ptr) {
 }
 
 #define SA16_LOG2_OF_SLOT_SIZE 4
-#define SA16_NUM_OF_SLOTS_RESERVED 3
 static void *SA16_Alloc() {
   int empty_slot_idx = -1;
   void *p = TryAllocFromExistedPages(&sa16, &empty_slot_idx);
@@ -171,13 +173,12 @@ static void *SA16_Alloc() {
   }
   assert(!sa16.pages[empty_slot_idx]);
   sa16.pages[empty_slot_idx] = AllocPageForSlotAllocator(
-      sa16.slot_size, sa16.num_of_slots, SA16_NUM_OF_SLOTS_RESERVED);
+      sa16.slot_size, sa16.num_of_slots, sa16.num_of_slots_reserved);
   sa16.next_page_cursor = empty_slot_idx;
   return TryAllocFromPage(sa16.pages[empty_slot_idx], sa16.slot_size);
 }
 
 #define SA128_LOG2_OF_SLOT_SIZE 7
-#define SA128_NUM_OF_SLOTS_RESERVED 1
 static void *SA128_Alloc() {
   int empty_slot_idx = -1;
   void *p = TryAllocFromExistedPages(&sa128, &empty_slot_idx);
@@ -193,7 +194,7 @@ static void *SA128_Alloc() {
   }
   assert(!sa128.pages[empty_slot_idx]);
   sa128.pages[empty_slot_idx] = AllocPageForSlotAllocator(
-      sa128.slot_size, sa128.num_of_slots, SA128_NUM_OF_SLOTS_RESERVED);
+      sa128.slot_size, sa128.num_of_slots, sa128.num_of_slots_reserved);
   sa128.next_page_cursor = empty_slot_idx;
   return TryAllocFromPage(sa128.pages[empty_slot_idx], sa128.slot_size);
 }
