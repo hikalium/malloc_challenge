@@ -156,48 +156,30 @@ static bool SAFree(SlotAllocator *sa, void *ptr) {
   SAFreeFromPage(sa, idx, ptr);
   return true;
 }
-
-#define SA16_LOG2_OF_SLOT_SIZE 4
-static void *SA16_Alloc() {
+static void *SAAlloc(SlotAllocator *sa) {
   int empty_slot_idx = -1;
-  void *p = TryAllocFromExistedPages(&sa16, &empty_slot_idx);
+  void *p = TryAllocFromExistedPages(sa, &empty_slot_idx);
   if (p) {
     // Found an empty slot in allocated pages.
     return p;
   }
   if (empty_slot_idx == -1) {
-    SAExpandPageListIfNeeded(&sa16);
-    assert(sa16.pages_used < sa16.pages_capacity);
-    empty_slot_idx = sa16.pages_used;
-    sa16.pages_used++;
+    SAExpandPageListIfNeeded(sa);
+    assert(sa->pages_used < sa->pages_capacity);
+    empty_slot_idx = sa->pages_used;
+    sa->pages_used++;
   }
-  assert(!sa16.pages[empty_slot_idx]);
-  sa16.pages[empty_slot_idx] = AllocPageForSlotAllocator(
-      sa16.slot_size, sa16.num_of_slots, sa16.num_of_slots_reserved);
-  sa16.next_page_cursor = empty_slot_idx;
-  return TryAllocFromPage(sa16.pages[empty_slot_idx], sa16.slot_size);
+  assert(!sa->pages[empty_slot_idx]);
+  sa->pages[empty_slot_idx] = AllocPageForSlotAllocator(
+      sa->slot_size, sa->num_of_slots, sa->num_of_slots_reserved);
+  sa->next_page_cursor = empty_slot_idx;
+  return TryAllocFromPage(sa->pages[empty_slot_idx], sa->slot_size);
 }
 
-#define SA128_LOG2_OF_SLOT_SIZE 7
-static void *SA128_Alloc() {
-  int empty_slot_idx = -1;
-  void *p = TryAllocFromExistedPages(&sa128, &empty_slot_idx);
-  if (p) {
-    // Found an empty slot in allocated pages.
-    return p;
-  }
-  if (empty_slot_idx == -1) {
-    SAExpandPageListIfNeeded(&sa128);
-    assert(sa128.pages_used < sa128.pages_capacity);
-    empty_slot_idx = sa128.pages_used;
-    sa128.pages_used++;
-  }
-  assert(!sa128.pages[empty_slot_idx]);
-  sa128.pages[empty_slot_idx] = AllocPageForSlotAllocator(
-      sa128.slot_size, sa128.num_of_slots, sa128.num_of_slots_reserved);
-  sa128.next_page_cursor = empty_slot_idx;
-  return TryAllocFromPage(sa128.pages[empty_slot_idx], sa128.slot_size);
-}
+#define SAAlloc16() SAAlloc(&sa16)
+#define SAAlloc128() SAAlloc(&sa128)
+#define SAFree16(p) SAFree(&sa16, p)
+#define SAFree128(p) SAFree(&sa128, p)
 
 //
 // Interfaces
@@ -205,8 +187,8 @@ static void *SA128_Alloc() {
 
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
-  InitSlotAllocator(&sa16, SA16_LOG2_OF_SLOT_SIZE);
-  InitSlotAllocator(&sa128, SA128_LOG2_OF_SLOT_SIZE);
+  InitSlotAllocator(&sa16, 4 /* = log_2(16) */);
+  InitSlotAllocator(&sa128, 7 /* = log_2(128) */);
 }
 
 // This is called every time an object is allocated. |size| is guaranteed
@@ -215,10 +197,10 @@ void my_initialize() {
 // munmap_to_system.
 void *my_malloc(size_t size) {
   if (size <= 16) {
-    return SA16_Alloc();
+    return SAAlloc16();
   }
   if (size <= 128) {
-    return SA128_Alloc();
+    return SAAlloc128();
   }
   return mmap_from_system(4096);
 }
@@ -226,7 +208,7 @@ void *my_malloc(size_t size) {
 // This is called every time an object is freed.  You are not allowed to use
 // any library functions other than mmap_from_system / munmap_to_system.
 void my_free(void *ptr) {
-  if (SAFree(&sa16, ptr) || SAFree(&sa128, ptr)) {
+  if (SAFree16(ptr) || SAFree128(ptr)) {
     return;
   }
   munmap_to_system(ptr, 4096);
@@ -240,29 +222,33 @@ void test() {
   my_initialize();
   // SA128
   for (int i = 0; i < 8; i++) {
-    arr[i] = SA128_Alloc();
+    arr[i] = SAAlloc128();
   }
   for (int i = 0; i < 8; i++) {
-    assert(SAFree(&sa128, arr[i]));
+    assert(!SAFree16(arr[i]));
+    assert(SAFree128(arr[i]));
   }
   for (int i = 0; i < 32; i++) {
-    arr[i] = SA128_Alloc();
+    arr[i] = SAAlloc128();
   }
   for (int i = 0; i < 32; i++) {
-    SAFree(&sa128, arr[i]);
+    assert(!SAFree16(arr[i]));
+    assert(SAFree128(arr[i]));
   }
   // SA16
   for (int i = 0; i < 8; i++) {
-    arr[i] = SA16_Alloc();
+    arr[i] = SAAlloc16();
   }
   for (int i = 0; i < 8; i++) {
-    assert(SAFree(&sa16, arr[i]));
+    assert(!SAFree128(arr[i]));
+    assert(SAFree16(arr[i]));
   }
   for (int i = 0; i < 32; i++) {
-    arr[i] = SA16_Alloc();
+    arr[i] = SAAlloc16();
   }
   for (int i = 0; i < 32; i++) {
-    SAFree(&sa16, arr[i]);
+    assert(!SAFree128(arr[i]));
+    assert(SAFree16(arr[i]));
   }
   // check other size
   my_free(my_malloc(256));
