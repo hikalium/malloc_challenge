@@ -31,9 +31,6 @@ typedef struct {
   int num_of_slots_reserved;
 } SlotAllocator;
 
-SlotAllocator sa16;
-SlotAllocator sa128;
-
 void InitSlotAllocator(SlotAllocator *sa, int log2_of_slot_size) {
   sa->pages = NULL;
   sa->pages_used = 0;
@@ -176,18 +173,29 @@ static void *SAAlloc(SlotAllocator *sa) {
   return TryAllocFromPage(sa->pages[empty_slot_idx], sa->slot_size);
 }
 
-#define SAAlloc16() SAAlloc(&sa16)
-#define SAAlloc128() SAAlloc(&sa128)
-#define SAFree16(p) SAFree(&sa16, p)
-#define SAFree128(p) SAFree(&sa128, p)
-
 //
 // Interfaces
 //
 
+static SlotAllocator sa16;
+static SlotAllocator sa32;
+static SlotAllocator sa64;
+static SlotAllocator sa128;
+
+#define SAAlloc16() SAAlloc(&sa16)
+#define SAFree16(p) SAFree(&sa16, p)
+#define SAAlloc32() SAAlloc(&sa32)
+#define SAFree32(p) SAFree(&sa32, p)
+#define SAAlloc64() SAAlloc(&sa64)
+#define SAFree64(p) SAFree(&sa64, p)
+#define SAAlloc128() SAAlloc(&sa128)
+#define SAFree128(p) SAFree(&sa128, p)
+
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
   InitSlotAllocator(&sa16, 4 /* = log_2(16) */);
+  InitSlotAllocator(&sa32, 5 /* = log_2(32) */);
+  InitSlotAllocator(&sa64, 6 /* = log_2(64) */);
   InitSlotAllocator(&sa128, 7 /* = log_2(128) */);
 }
 
@@ -199,6 +207,12 @@ void *my_malloc(size_t size) {
   if (size <= 16) {
     return SAAlloc16();
   }
+  if (size <= 32) {
+    return SAAlloc32();
+  }
+  if (size <= 64) {
+    return SAAlloc64();
+  }
   if (size <= 128) {
     return SAAlloc128();
   }
@@ -208,7 +222,7 @@ void *my_malloc(size_t size) {
 // This is called every time an object is freed.  You are not allowed to use
 // any library functions other than mmap_from_system / munmap_to_system.
 void my_free(void *ptr) {
-  if (SAFree16(ptr) || SAFree128(ptr)) {
+  if (SAFree16(ptr) || SAFree32(ptr) || SAFree64(ptr) || SAFree128(ptr)) {
     return;
   }
   munmap_to_system(ptr, 4096);
