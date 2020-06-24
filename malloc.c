@@ -12,6 +12,10 @@ void munmap_to_system(void *ptr, size_t size);
 #define MAX_ALLOC_SIZE 4000
 #define PAGE_SIZE 4096ULL
 
+//
+// Slot Allocator
+//
+
 #define MAX_NUM_OF_SLOTS 256
 
 typedef struct {
