@@ -118,6 +118,15 @@ static ChunkHeader *AllocPageForSlotAllocator(int slot_size, int slots,
   }
   return ch;
 }
+static void SAFreeFromPage(SlotAllocator *sa, int page_idx, void *ptr,
+                           int log2_slot_size) {
+  ChunkHeader *ch = sa->pages[page_idx];
+  int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> log2_slot_size;
+  CHClearUsedBitmap(ch, slot);
+  if (slot < ch->next_slot_cursor) {
+    ch->next_slot_cursor = slot;
+  }
+}
 
 #define SA16_LOG2_OF_SLOT_SIZE 4
 #define SA16_SLOT_SIZE (1ULL << SA16_LOG2_OF_SLOT_SIZE)
@@ -142,6 +151,25 @@ static void *SA16_Alloc() {
   sa16.next_page_cursor = empty_slot_idx;
   return TryAllocFromPage(sa16.pages[empty_slot_idx], SA16_SLOT_SIZE);
 }
+static bool SA16_Free(void *ptr) {
+  // retv: ptr is freed or not
+  int idx = -1;
+  ChunkHeader *key = (ChunkHeader *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
+  for (int i = 0; i < sa16.pages_used; i++) {
+    if (sa16.pages[i] == key) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx == -1) {
+    return false;
+  }
+  if (idx < sa16.next_page_cursor) {
+    sa16.next_page_cursor = idx;
+  }
+  SAFreeFromPage(&sa16, idx, ptr, SA16_LOG2_OF_SLOT_SIZE);
+  return true;
+};
 
 #define SA128_LOG2_OF_SLOT_SIZE 7
 static void *SA128_Alloc() {
@@ -162,15 +190,6 @@ static void *SA128_Alloc() {
   sa128.next_page_cursor = empty_slot_idx;
   return TryAllocFromPage(sa128.pages[empty_slot_idx], 128);
 }
-static void SAFreeFromPage(SlotAllocator *sa, int page_idx, void *ptr,
-                           int log2_slot_size) {
-  ChunkHeader *ch = sa->pages[page_idx];
-  int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> log2_slot_size;
-  CHClearUsedBitmap(ch, slot);
-  if (slot < ch->next_slot_cursor) {
-    ch->next_slot_cursor = slot;
-  }
-}
 static bool SA128_Free(void *ptr) {
   // retv: ptr is freed or not
   int idx = -1;
@@ -188,25 +207,6 @@ static bool SA128_Free(void *ptr) {
     sa128.next_page_cursor = idx;
   }
   SAFreeFromPage(&sa128, idx, ptr, SA128_LOG2_OF_SLOT_SIZE);
-  return true;
-};
-static bool SA16_Free(void *ptr) {
-  // retv: ptr is freed or not
-  int idx = -1;
-  ChunkHeader *key = (ChunkHeader *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
-  for (int i = 0; i < sa16.pages_used; i++) {
-    if (sa16.pages[i] == key) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx == -1) {
-    return false;
-  }
-  if (idx < sa16.next_page_cursor) {
-    sa16.next_page_cursor = idx;
-  }
-  SAFreeFromPage(&sa16, idx, ptr, SA16_LOG2_OF_SLOT_SIZE);
   return true;
 };
 
