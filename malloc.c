@@ -25,16 +25,18 @@ typedef struct {
   int64_t pages_used;
   int64_t pages_capacity; // multiple of (PAGE_SIZE / sizeof(ChunkHeader*))
   int64_t next_page_cursor;
+  int log2_of_slot_size;
 } SlotAllocator;
 
 SlotAllocator sa16;
 SlotAllocator sa128;
 
-void InitSlotAllocator(SlotAllocator *sa) {
+void InitSlotAllocator(SlotAllocator *sa, int log2_of_slot_size) {
   sa->pages = NULL;
   sa->pages_used = 0;
   sa->pages_capacity = 0;
   sa->next_page_cursor = 0;
+  sa->log2_of_slot_size = log2_of_slot_size;
 }
 void SAExpandPageListIfNeeded(SlotAllocator *sa) {
   if (sa->pages_used < sa->pages_capacity) {
@@ -118,14 +120,35 @@ static ChunkHeader *AllocPageForSlotAllocator(int slot_size, int slots,
   }
   return ch;
 }
-static void SAFreeFromPage(SlotAllocator *sa, int page_idx, void *ptr,
-                           int log2_slot_size) {
+static void SAFreeFromPage(SlotAllocator *sa, int page_idx, void *ptr) {
   ChunkHeader *ch = sa->pages[page_idx];
-  int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> log2_slot_size;
+  int slot = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> sa->log2_of_slot_size;
   CHClearUsedBitmap(ch, slot);
   if (slot < ch->next_slot_cursor) {
     ch->next_slot_cursor = slot;
   }
+}
+static int SAFindPageForPtr(SlotAllocator *sa, void *ptr) {
+  // Returns index of sa.pages. -1 if not found.
+  ChunkHeader *key = (ChunkHeader *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
+  for (int i = 0; i < sa->pages_used; i++) {
+    if (sa->pages[i] != key)
+      continue;
+    return i;
+  }
+  return -1;
+}
+static bool SAFree(SlotAllocator *sa, void *ptr) {
+  // retv: ptr is freed or not
+  int idx = SAFindPageForPtr(sa, ptr);
+  if (idx == -1) {
+    return false;
+  }
+  if (idx < sa->next_page_cursor) {
+    sa->next_page_cursor = idx;
+  }
+  SAFreeFromPage(sa, idx, ptr);
+  return true;
 }
 
 #define SA16_LOG2_OF_SLOT_SIZE 4
@@ -151,25 +174,6 @@ static void *SA16_Alloc() {
   sa16.next_page_cursor = empty_slot_idx;
   return TryAllocFromPage(sa16.pages[empty_slot_idx], SA16_SLOT_SIZE);
 }
-static bool SA16_Free(void *ptr) {
-  // retv: ptr is freed or not
-  int idx = -1;
-  ChunkHeader *key = (ChunkHeader *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
-  for (int i = 0; i < sa16.pages_used; i++) {
-    if (sa16.pages[i] == key) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx == -1) {
-    return false;
-  }
-  if (idx < sa16.next_page_cursor) {
-    sa16.next_page_cursor = idx;
-  }
-  SAFreeFromPage(&sa16, idx, ptr, SA16_LOG2_OF_SLOT_SIZE);
-  return true;
-};
 
 #define SA128_LOG2_OF_SLOT_SIZE 7
 static void *SA128_Alloc() {
@@ -190,25 +194,6 @@ static void *SA128_Alloc() {
   sa128.next_page_cursor = empty_slot_idx;
   return TryAllocFromPage(sa128.pages[empty_slot_idx], 128);
 }
-static bool SA128_Free(void *ptr) {
-  // retv: ptr is freed or not
-  int idx = -1;
-  ChunkHeader *key = (ChunkHeader *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
-  for (int i = 0; i < sa128.pages_used; i++) {
-    if (sa128.pages[i] == key) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx == -1) {
-    return false;
-  }
-  if (idx < sa128.next_page_cursor) {
-    sa128.next_page_cursor = idx;
-  }
-  SAFreeFromPage(&sa128, idx, ptr, SA128_LOG2_OF_SLOT_SIZE);
-  return true;
-};
 
 //
 // Interfaces
@@ -216,8 +201,8 @@ static bool SA128_Free(void *ptr) {
 
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
-  InitSlotAllocator(&sa16);
-  InitSlotAllocator(&sa128);
+  InitSlotAllocator(&sa16, SA16_LOG2_OF_SLOT_SIZE);
+  InitSlotAllocator(&sa128, SA128_LOG2_OF_SLOT_SIZE);
 }
 
 // This is called every time an object is allocated. |size| is guaranteed
@@ -237,10 +222,7 @@ void *my_malloc(size_t size) {
 // This is called every time an object is freed.  You are not allowed to use
 // any library functions other than mmap_from_system / munmap_to_system.
 void my_free(void *ptr) {
-  if (SA16_Free(ptr)) {
-    return;
-  }
-  if (SA128_Free(ptr)) {
+  if (SAFree(&sa16, ptr) || SAFree(&sa128, ptr)) {
     return;
   }
   munmap_to_system(ptr, 4096);
@@ -257,26 +239,26 @@ void test() {
     arr[i] = SA128_Alloc();
   }
   for (int i = 0; i < 8; i++) {
-    assert(SA128_Free(arr[i]));
+    assert(SAFree(&sa128, arr[i]));
   }
   for (int i = 0; i < 32; i++) {
     arr[i] = SA128_Alloc();
   }
   for (int i = 0; i < 32; i++) {
-    SA128_Free(arr[i]);
+    SAFree(&sa128, arr[i]);
   }
   // SA16
   for (int i = 0; i < 8; i++) {
     arr[i] = SA16_Alloc();
   }
   for (int i = 0; i < 8; i++) {
-    assert(SA16_Free(arr[i]));
+    assert(SAFree(&sa16, arr[i]));
   }
   for (int i = 0; i < 32; i++) {
     arr[i] = SA16_Alloc();
   }
   for (int i = 0; i < 32; i++) {
-    SA16_Free(arr[i]);
+    SAFree(&sa16, arr[i]);
   }
   // check other size
   my_free(my_malloc(256));
