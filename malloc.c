@@ -181,6 +181,7 @@ static SlotAllocator sa16;
 static SlotAllocator sa32;
 static SlotAllocator sa64;
 static SlotAllocator sa128;
+static SlotAllocator sa256;
 
 #define SAAlloc16() SAAlloc(&sa16)
 #define SAFree16(p) SAFree(&sa16, p)
@@ -190,6 +191,8 @@ static SlotAllocator sa128;
 #define SAFree64(p) SAFree(&sa64, p)
 #define SAAlloc128() SAAlloc(&sa128)
 #define SAFree128(p) SAFree(&sa128, p)
+#define SAAlloc256() SAAlloc(&sa256)
+#define SAFree256(p) SAFree(&sa256, p)
 
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
@@ -197,6 +200,7 @@ void my_initialize() {
   InitSlotAllocator(&sa32, 5 /* = log_2(32) */);
   InitSlotAllocator(&sa64, 6 /* = log_2(64) */);
   InitSlotAllocator(&sa128, 7 /* = log_2(128) */);
+  InitSlotAllocator(&sa256, 8 /* = log_2(256) */);
 }
 
 // This is called every time an object is allocated. |size| is guaranteed
@@ -216,13 +220,17 @@ void *my_malloc(size_t size) {
   if (size <= 128) {
     return SAAlloc128();
   }
+  if (size <= 256) {
+    return SAAlloc256();
+  }
   return mmap_from_system(4096);
 }
 
 // This is called every time an object is freed.  You are not allowed to use
 // any library functions other than mmap_from_system / munmap_to_system.
 void my_free(void *ptr) {
-  if (SAFree16(ptr) || SAFree32(ptr) || SAFree64(ptr) || SAFree128(ptr)) {
+  if (SAFree16(ptr) || SAFree32(ptr) || SAFree64(ptr) || SAFree128(ptr) ||
+      SAFree256(ptr)) {
     return;
   }
   munmap_to_system(ptr, 4096);
