@@ -12,6 +12,14 @@ void munmap_to_system(void *ptr, size_t size);
 #define MAX_ALLOC_SIZE 4000
 #define PAGE_SIZE 4096ULL
 
+//#define DEBUG
+
+#ifdef DEBUG
+#define DebugPrint(...) printf(__VA_ARGS__)
+#else
+#define DebugPrint(...)
+#endif
+
 //
 // Slot Allocator
 //
@@ -178,6 +186,217 @@ static void *SAAlloc(SlotAllocator *sa) {
 }
 
 //
+// Bitmap allocator
+//
+typedef struct {
+  // This struct should be less than 64 bytes
+  uint8_t packed_len[48]; // 48 bytes = (6 * 64) bits. Each 6 bit has length
+  uint64_t bitmap;        // bit[n] = 1: used block. 0: free block.
+  uint64_t reserved;
+  // Following bytes are data blocks: (64 * 63) bytes
+} PageBitmap;
+typedef struct {
+  PageBitmap **pages;
+  int64_t pages_used;
+  int64_t pages_capacity; // multiple of (PAGE_SIZE / sizeof(PageBitmap*))
+} BitmapAllocator;
+
+static BitmapAllocator ba;
+
+void BAExpandPageListIfNeeded() {
+  if (ba.pages_used < ba.pages_capacity) {
+    // Page list has a room for new page. Do nothing.
+    return;
+  }
+  const int new_capacity = ba.pages_capacity + PAGE_SIZE / sizeof(PageBitmap *);
+  PageBitmap **new_pages =
+      mmap_from_system(new_capacity * sizeof(PageBitmap *));
+  memcpy(new_pages, ba.pages, sizeof(PageBitmap *) * ba.pages_capacity);
+  bzero(&new_pages[ba.pages_capacity],
+        sizeof(ChunkHeader *) * (new_capacity - ba.pages_capacity));
+  if (ba.pages) {
+    munmap_to_system(ba.pages, ba.pages_capacity * sizeof(PageBitmap *));
+  }
+  ba.pages = new_pages;
+  ba.pages_capacity = new_capacity;
+}
+PageBitmap *BAAllocPage() {
+  PageBitmap *pb = mmap_from_system(PAGE_SIZE);
+  bzero(pb, PAGE_SIZE);
+  pb->bitmap = 1; // first block is allocated for PageBitmap structure
+  return pb;
+}
+void BASetPackedLen(PageBitmap *pb, int idx, size_t blocks) {
+  // bytes        : 00000000 11111111 22222222
+  // packed 6bits : 11000000 22221111 33333322
+  assert(idx < 64);
+  assert(blocks < 64);
+  int base = idx / 4 * 3;
+  switch (idx & 3) {
+  case 0:
+    pb->packed_len[base + 0] =
+        (0xC0 & pb->packed_len[base + 0]) | (0x3F & blocks);
+    return;
+  case 1:
+    pb->packed_len[base + 0] =
+        (0xC0 & (blocks << 6)) | (0x3F & pb->packed_len[base + 0]);
+    pb->packed_len[base + 1] =
+        (0xF0 & pb->packed_len[base + 1]) | (0x0F & (blocks >> 2));
+    return;
+  case 2:
+    pb->packed_len[base + 1] =
+        (0xF0 & (blocks << 4)) | (0x0F & pb->packed_len[base + 1]);
+    pb->packed_len[base + 2] =
+        (0xFC & pb->packed_len[base + 2]) | (0x03 & (blocks >> 4));
+    return;
+  case 3:
+    pb->packed_len[base + 2] =
+        (0xFC & (blocks << 2)) | (0x03 & pb->packed_len[base + 2]);
+    return;
+  }
+  assert(false);
+}
+int BAGetPackedLen(PageBitmap *pb, int idx) {
+  // bytes        : 00000000 11111111 22222222
+  // packed 6bits : 11000000 22221111 33333322
+  assert(idx < 64);
+  int base = idx / 4 * 3;
+  switch (idx & 3) {
+  case 0:
+    return pb->packed_len[base + 0] & 0x3F;
+  case 1:
+    return ((pb->packed_len[base + 1] & 0xF) << 2) |
+           (pb->packed_len[base + 0] >> 6);
+  case 2:
+    return ((pb->packed_len[base + 2] & 0x3) << 4) |
+           (pb->packed_len[base + 1] >> 4);
+  case 3:
+    return pb->packed_len[base + 2] >> 2;
+  }
+  assert(false);
+}
+void BAPackedLenTest() {
+  printf("%s begin\n", __func__);
+  PageBitmap pb;
+  bzero(&pb, sizeof(PageBitmap));
+  for (int i = 0; i < 64; i++) {
+    assert(BAGetPackedLen(&pb, i) == 0);
+  }
+  memset(&pb, 0xff, sizeof(PageBitmap));
+  for (int i = 0; i < 64; i++) {
+    assert(BAGetPackedLen(&pb, i) == 63);
+  }
+  memset(&pb, 0x5A, sizeof(PageBitmap));
+  for (int i = 0; i < 64; i++) {
+    switch (i & 3) {
+    case 0:
+      assert(BAGetPackedLen(&pb, i) == 26);
+      break;
+    case 1:
+      assert(BAGetPackedLen(&pb, i) == 41);
+      break;
+    case 2:
+      assert(BAGetPackedLen(&pb, i) == 37);
+      break;
+    case 3:
+      assert(BAGetPackedLen(&pb, i) == 22);
+      break;
+    default:
+      assert(false);
+    }
+  }
+  memset(&pb, 0xA5, sizeof(PageBitmap));
+  for (int i = 0; i < 64; i++) {
+    switch (i & 3) {
+    case 0:
+      assert(BAGetPackedLen(&pb, i) == 37);
+      break;
+    case 1:
+      assert(BAGetPackedLen(&pb, i) == 22);
+      break;
+    case 2:
+      assert(BAGetPackedLen(&pb, i) == 26);
+      break;
+    case 3:
+      assert(BAGetPackedLen(&pb, i) == 41);
+      break;
+    default:
+      assert(false);
+    }
+  }
+  printf("%s end\n", __func__);
+}
+void *BAAllocFromPage(PageBitmap *pb, size_t blocks) {
+  uint64_t mask = (1ULL << blocks) - 1;
+  int i;
+  for (i = 1; i < 64 - blocks + 1; i++) {
+    if (((pb->bitmap >> i) & mask) != 0)
+      continue;
+    break;
+  }
+  if (i >= 64 - blocks + 1)
+    return NULL; // No enough space found
+  pb->bitmap |= (mask << i);
+  BASetPackedLen(pb, i, blocks);
+  void *p = (void *)((uint8_t *)pb + i * 64);
+  DebugPrint("%s: alloc %p: %zu blocks (%zu bytes)\n", __FUNCTION__, p, blocks,
+             blocks << 6);
+  return p;
+}
+static int BAFindPageForPtr(void *ptr) {
+  // Returns index of sa.pages. -1 if not found.
+  PageBitmap *key = (PageBitmap *)((uint64_t)ptr & ~(PAGE_SIZE - 1));
+  for (int i = 0; i < ba.pages_used; i++) {
+    if (ba.pages[i] != key)
+      continue;
+    return i;
+  }
+  return -1;
+}
+static void BAFreeFromPage(int page_idx, void *ptr) {
+  PageBitmap *pb = ba.pages[page_idx];
+  int ofs = ((uint64_t)ptr & (PAGE_SIZE - 1)) >> 6;
+  int blocks = BAGetPackedLen(pb, ofs);
+  uint64_t mask = (1ULL << blocks) - 1;
+  pb->bitmap &= ~(mask << ofs);
+  DebugPrint("%s: free %p: %d blocks\n", __FUNCTION__, ptr, blocks);
+}
+void *BAAlloc(size_t size) {
+  int blocks = (size + 63) >> 6;
+  int empty_slot_idx = -1;
+  void *p;
+  for (int i = 0; i < ba.pages_used; i++) {
+    if (!ba.pages[i]) {
+      if (empty_slot_idx != -1) {
+        empty_slot_idx = i;
+      }
+      continue;
+    }
+    if ((p = BAAllocFromPage(ba.pages[i], blocks))) {
+      return p;
+    }
+  }
+  if (empty_slot_idx == -1) {
+    BAExpandPageListIfNeeded();
+    assert(ba.pages_used < ba.pages_capacity);
+    empty_slot_idx = ba.pages_used;
+    ba.pages_used++;
+  }
+  assert(!ba.pages[empty_slot_idx]);
+  ba.pages[empty_slot_idx] = BAAllocPage();
+  return BAAllocFromPage(ba.pages[empty_slot_idx], blocks);
+}
+static bool BAFree(void *ptr) {
+  // retv: ptr is freed or not
+  int idx = BAFindPageForPtr(ptr);
+  if (idx == -1) {
+    return false;
+  }
+  BAFreeFromPage(idx, ptr);
+  return true;
+}
+
+//
 // Interfaces
 //
 
@@ -200,6 +419,7 @@ static SlotAllocator sa256;
 
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
+  bzero(&ba, sizeof(ba));
   InitSlotAllocator(&sa16, 4 /* = log_2(16) */);
   InitSlotAllocator(&sa32, 5 /* = log_2(32) */);
   InitSlotAllocator(&sa64, 6 /* = log_2(64) */);
@@ -227,7 +447,7 @@ void *my_malloc(size_t size) {
   if (size <= 256) {
     return SAAlloc256();
   }
-  return mmap_from_system(4096);
+  return BAAlloc(size);
 }
 
 // This is called every time an object is freed.  You are not allowed to use
@@ -237,15 +457,33 @@ void my_free(void *ptr) {
       SAFree256(ptr)) {
     return;
   }
-  munmap_to_system(ptr, 4096);
+  assert(BAFree(ptr));
 }
 
 void my_finalize() {}
 
 void test() {
+  BAPackedLenTest();
   static void *arr[32];
   printf("%s begin\n", __func__);
   my_initialize();
+  // BitmapAllocator
+  BAAlloc(MAX_ALLOC_SIZE);
+  BAAlloc(1234);
+  for (int i = 0; i < 8; i++) {
+    arr[i] = BAAlloc(1240 + 64 * i);
+  }
+  for (int i = 0; i < 8; i++) {
+    assert(BAFree(arr[i]));
+  }
+  // Alloc same chunks again
+  for (int i = 0; i < 8; i++) {
+    // allocated address should be the same as before
+    assert(arr[i] == BAAlloc(1240 + 64 * i));
+  }
+  for (int i = 0; i < 8; i++) {
+    assert(BAFree(arr[i]));
+  }
   // SA128
   for (int i = 0; i < 8; i++) {
     arr[i] = SAAlloc128();
@@ -278,7 +516,6 @@ void test() {
   }
   // check other size
   my_free(my_malloc(256));
-  // exit(EXIT_SUCCESS);
   my_finalize();
   printf("%s end\n", __func__);
 }
