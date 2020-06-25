@@ -203,7 +203,7 @@ typedef struct {
   // This struct should be less than 64 bytes
   uint8_t packed_len[48]; // 48 bytes = (6 * 64) bits. Each 6 bit has length
   uint64_t bitmap;        // bit[n] = 1: used block. 0: free block.
-  uint64_t reserved;
+  int alloc_count;
   // Following bytes are data blocks: (64 * 63) bytes
 } PageBitmap;
 typedef struct {
@@ -348,6 +348,7 @@ void *BAAllocFromPage(PageBitmap *pb, size_t blocks) {
   if (i >= 64 - blocks + 1)
     return NULL; // No enough space found
   pb->bitmap |= (mask << i);
+  pb->alloc_count++;
   BASetPackedLen(pb, i, blocks);
   void *p = (void *)((uint8_t *)pb + i * 64);
   DebugPrint("%s: alloc %p: %zu blocks (%zu bytes)\n", __FUNCTION__, p, blocks,
@@ -371,6 +372,13 @@ static void BAFreeFromPage(int page_idx, void *ptr) {
   uint64_t mask = (1ULL << blocks) - 1;
   pb->bitmap &= ~(mask << ofs);
   DebugPrint("%s: free %p: %d blocks\n", __FUNCTION__, ptr, blocks);
+  pb->alloc_count--;
+  if (pb->alloc_count == 0) {
+    // Free unused page
+    DebugPrint("%s: free page!\n", __FUNCTION__);
+    munmap_to_system(pb, PAGE_SIZE);
+    ba.pages[page_idx] = NULL;
+  }
 }
 void *BAAllocInternal(size_t size, bool no_page_alloc) {
   int blocks = (size + 63) >> 6;
@@ -436,6 +444,7 @@ static SlotAllocator sa256;
 
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
+  assert(sizeof(PageBitmap) <= 64);
   bzero(&ba, sizeof(ba));
   InitSlotAllocator(&sa16, 4 /* = log_2(16) */);
   InitSlotAllocator(&sa32, 5 /* = log_2(32) */);
