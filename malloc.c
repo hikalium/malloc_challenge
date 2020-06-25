@@ -361,7 +361,7 @@ static void BAFreeFromPage(int page_idx, void *ptr) {
   pb->bitmap &= ~(mask << ofs);
   DebugPrint("%s: free %p: %d blocks\n", __FUNCTION__, ptr, blocks);
 }
-void *BAAlloc(size_t size) {
+void *BAAllocInternal(size_t size, bool no_page_alloc) {
   int blocks = (size + 63) >> 6;
   int empty_slot_idx = -1;
   void *p;
@@ -376,6 +376,8 @@ void *BAAlloc(size_t size) {
       return p;
     }
   }
+  if (no_page_alloc)
+    return NULL;
   if (empty_slot_idx == -1) {
     BAExpandPageListIfNeeded();
     assert(ba.pages_used < ba.pages_capacity);
@@ -386,6 +388,10 @@ void *BAAlloc(size_t size) {
   ba.pages[empty_slot_idx] = BAAllocPage();
   return BAAllocFromPage(ba.pages[empty_slot_idx], blocks);
 }
+static void *BAAllocWithNoPageAlloc(size_t size) {
+  return BAAllocInternal(size, true);
+}
+static void *BAAlloc(size_t size) { return BAAllocInternal(size, false); }
 static bool BAFree(void *ptr) {
   // retv: ptr is freed or not
   int idx = BAFindPageForPtr(ptr);
@@ -438,6 +444,10 @@ void *my_malloc(size_t size) {
   if (size <= 32) {
     return SAAlloc32();
   }
+  void *p;
+  if ((p = BAAllocWithNoPageAlloc(size))) {
+    return p;
+  }
   if (size <= 64) {
     return SAAlloc64();
   }
@@ -468,8 +478,10 @@ void test() {
   printf("%s begin\n", __func__);
   my_initialize();
   // BitmapAllocator
-  BAAlloc(MAX_ALLOC_SIZE);
-  BAAlloc(1234);
+  assert(!BAAllocWithNoPageAlloc(1234));
+  assert(BAAlloc(MAX_ALLOC_SIZE));
+  assert(BAAlloc(1234));
+  assert(!BAAllocWithNoPageAlloc(64 * 63));
   for (int i = 0; i < 8; i++) {
     arr[i] = BAAlloc(1240 + 64 * i);
   }
