@@ -38,7 +38,7 @@ void write_string(char** wc, char* s) {
 
 void trace_print_malloc(void* p, size_t size) {
   char s[2 + 16 + 1 + 16 + 1 + 1];
-  char *wc = &s[0];
+  char* wc = &s[0];
   write_string(&wc, "a ");
   write_uint64_hex(&wc, (uint64_t)p);
   write_string(&wc, " ");
@@ -49,9 +49,22 @@ void trace_print_malloc(void* p, size_t size) {
 
 void trace_print_free(void* p) {
   char s[2 + 16 + 1 + 1];
-  char *wc = &s[0];
+  char* wc = &s[0];
   write_string(&wc, "f ");
   write_uint64_hex(&wc, (uint64_t)p);
+  write_string(&wc, "\n");
+  write(trace_fd, s, wc - s);
+}
+
+void trace_print_realloc(void* new_p, size_t size, void* old_p) {
+  char s[2 + (16 + 1) * 3 + 1];
+  char* wc = &s[0];
+  write_string(&wc, "r ");
+  write_uint64_hex(&wc, (uint64_t)new_p);
+  write_string(&wc, " ");
+  write_uint64_hex(&wc, size);
+  write_string(&wc, " ");
+  write_uint64_hex(&wc, (uint64_t)old_p);
   write_string(&wc, "\n");
   write(trace_fd, s, wc - s);
 }
@@ -78,6 +91,32 @@ void* malloc(size_t size) {
   return p;
 }
 
+#define TMP_BUFFER_SIZE 4096
+static char tmp_buffer[TMP_BUFFER_SIZE];
+static int tmp_buffer_used;
+void* calloc(size_t n, size_t elem_size) {
+  static void* (*original_calloc)(size_t, size_t);
+  static int initializing;
+  if (!original_calloc) {
+    if (initializing) {
+      if (tmp_buffer_used + n * elem_size >= TMP_BUFFER_SIZE) {
+        fprintf(stderr, "No more tmp_buffer\n");
+        exit(EXIT_FAILURE);
+      }
+      void* p = &tmp_buffer[tmp_buffer_used];
+      tmp_buffer_used += n * elem_size;
+      trace_print_malloc(p, elem_size * n);
+      return p;
+    }
+    initializing = 1;
+    init_trace_fp();
+    original_calloc = dlsym(RTLD_NEXT, "calloc");
+  }
+  void* p = original_calloc(n, elem_size);
+  trace_print_malloc(p, elem_size * n);
+  return p;
+}
+
 void free(void* p) {
   if (!p) return;
   static void (*original_free)(void*);
@@ -85,6 +124,22 @@ void free(void* p) {
     init_trace_fp();
     original_free = dlsym(RTLD_NEXT, "free");
   }
-  original_free(p);
+  if ((uint64_t)tmp_buffer <= (uint64_t)p &&
+      (uint64_t)p < (uint64_t)tmp_buffer + TMP_BUFFER_SIZE) {
+    // skip
+  } else {
+    original_free(p);
+  }
   trace_print_free(p);
+}
+
+void* realloc(void* p, size_t size) {
+  static void* (*original_realloc)(void*, size_t);
+  if (!original_realloc) {
+    init_trace_fp();
+    original_realloc = dlsym(RTLD_NEXT, "realloc");
+  }
+  void* new_p = original_realloc(p, size);
+  trace_print_realloc(new_p, size, p);
+  return new_p;
 }
