@@ -1,0 +1,10 @@
+set term png medium size 2048,1024
+
+set output "sample_trace_gpp.png"
+set boxwidth 0.1
+set style fill solid
+set y2tics nomirror
+plot \
+"sample_trace_gpp.dat" using 1:3 with lines axis x1y1, \
+"sample_trace_gpp.dat" using 1:5 with lines axis x1y1, \
+"sample_trace_gpp.dat" using 1:4 with lines axis x1y2
