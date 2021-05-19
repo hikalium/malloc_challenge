@@ -1,7 +1,10 @@
-default: hook.so trace2timeline.bin
+default: hook.so trace2timeline.bin alloc_free_seq.bin
 
 %.bin : %.cc Makefile
 	g++ -Wall -Wpedantic -o $@ $*.cc
+
+%.bin : %.c Makefile
+	gcc -Wall -Wpedantic -o $@ $*.c
 
 hook.so : hook.c Makefile
 	gcc -o hook.so -fPIC -shared hook.c -ldl -D_GNU_SOURCE
@@ -12,7 +15,11 @@ run_git : hook.so
 	LD_PRELOAD=./hook.so git status
 
 clean :
-	-rm *.so trace*.txt
+	-rm trace*.txt
+
+distclean :
+	make clean
+	-rm *.so *.bin
 
 trace : hook.so
 	-rm trace*.txt
