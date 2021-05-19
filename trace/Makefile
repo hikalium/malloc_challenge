@@ -19,6 +19,11 @@ trace : hook.so
 	LD_PRELOAD=./hook.so g++ -S -o /dev/null trace2timeline.cc
 	ls -Artla trace*.txt | head -n 1
 
+trace2 : hook.so
+	-rm trace*.txt
+	LD_PRELOAD=./hook.so g++ -Wall -Wpedantic -o /dev/null trace2timeline.cc 
+	ls -Artla trace*.txt | head -n 1
+
 trace_dbg : hook.so
 	-rm trace*.txt
 	LD_PRELOAD=./hook.so LD_DEBUG=libs,files g++ -S -o /dev/null trace2timeline.cc
