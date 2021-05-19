@@ -37,7 +37,7 @@ void write_string(char** wc, char* s) {
 }
 
 void trace_print_malloc(void* p, size_t size) {
-  char s[2 + 16 + 1 + 16 + 1 + 1];
+  char s[2 + (16 + 1) * 2 + 10];
   char* wc = &s[0];
   write_string(&wc, "a ");
   write_uint64_hex(&wc, (uint64_t)p);
@@ -48,7 +48,7 @@ void trace_print_malloc(void* p, size_t size) {
 }
 
 void trace_print_free(void* p) {
-  char s[2 + 16 + 1 + 1];
+  char s[2 + 16 + 1 + 10];
   char* wc = &s[0];
   write_string(&wc, "f ");
   write_uint64_hex(&wc, (uint64_t)p);
@@ -57,7 +57,7 @@ void trace_print_free(void* p) {
 }
 
 void trace_print_realloc(void* new_p, size_t size, void* old_p) {
-  char s[2 + (16 + 1) * 3 + 1];
+  char s[2 + (16 + 1) * 3 + 10];
   char* wc = &s[0];
   write_string(&wc, "r ");
   write_uint64_hex(&wc, (uint64_t)new_p);
@@ -73,7 +73,12 @@ static void init_trace_fp() {
   if (trace_fd) {
     return;
   }
-  trace_fd = creat("trace.txt", 0644);
+  char s[64];
+  char* wc = &s[0];
+  write_string(&wc, "trace_");
+  write_uint64_hex(&wc, (uint64_t)&trace_fd);
+  write_string(&wc, ".txt");
+  trace_fd = creat(s, 0644);
   if (trace_fd == -1) {
     fprintf(stderr, "init_trace_fp() failed.\n");
     exit(EXIT_FAILURE);
@@ -98,6 +103,7 @@ void* calloc(size_t n, size_t elem_size) {
   static void* (*original_calloc)(size_t, size_t);
   static int initializing;
   if (!original_calloc) {
+    init_trace_fp();
     if (initializing) {
       if (tmp_buffer_used + n * elem_size >= TMP_BUFFER_SIZE) {
         fprintf(stderr, "No more tmp_buffer\n");
@@ -108,8 +114,6 @@ void* calloc(size_t n, size_t elem_size) {
       trace_print_malloc(p, elem_size * n);
       return p;
     }
-    initializing = 1;
-    init_trace_fp();
     original_calloc = dlsym(RTLD_NEXT, "calloc");
   }
   void* p = original_calloc(n, elem_size);
@@ -142,4 +146,9 @@ void* realloc(void* p, size_t size) {
   void* new_p = original_realloc(p, size);
   trace_print_realloc(new_p, size, p);
   return new_p;
+}
+
+void* reallocarray(void* p, size_t n, size_t elem_size) {
+  fprintf(stderr, "reallocarray called\n");
+  exit(EXIT_FAILURE);
 }

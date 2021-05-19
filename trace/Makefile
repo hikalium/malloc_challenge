@@ -13,3 +13,13 @@ run_git : hook.so
 
 clean :
 	-rm *.so trace*.txt
+
+trace : hook.so
+	-rm trace*.txt
+	LD_PRELOAD=./hook.so g++ -S -o /dev/null trace2timeline.cc
+	ls -Artla trace*.txt | head -n 1
+
+trace_dbg : hook.so
+	-rm trace*.txt
+	LD_PRELOAD=./hook.so LD_DEBUG=libs,files g++ -S -o /dev/null trace2timeline.cc
+	ls -Artla trace*.txt | head -n 1
