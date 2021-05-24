@@ -1,3 +1,4 @@
 *.bin
 *.swp
 *.dSYM
+out.txt
