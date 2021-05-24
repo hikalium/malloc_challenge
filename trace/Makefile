@@ -49,6 +49,13 @@ trace4 : hook.so
 	ls -Artla trace*.txt | head -n 1
 	mv trace*.txt trace4_bash_loop.txt
 
+trace5 : hook.so
+	# https://www.reddit.com/r/bash/comments/6rs6sr/writing_fizzbuzz_in_bash/
+	-rm trace*.txt
+	LD_PRELOAD=./hook.so bash -c 'for ((i=1;i<=100;i++)); do if ! ((i%15)); then echo FizzBuzz; elif ! ((i%3)); then echo Fizz; elif ! ((i%5)); then echo Buzz; else echo $$i; fi; done'
+	ls -Artla trace*.txt | head -n 1
+	mv trace*.txt trace5_bash_fizzbuzz.txt
+
 trace_dbg : hook.so
 	-rm trace*.txt
 	LD_PRELOAD=./hook.so LD_DEBUG=libs,files g++ -S -o /dev/null trace2timeline.cc
