@@ -34,7 +34,7 @@ trace : hook.so
 
 trace2 : hook.so
 	-rm trace*.txt
-	LD_PRELOAD=./hook.so g++ -Wall -Wpedantic -o /dev/null trace2timeline.cc 
+	LD_PRELOAD=./hook.so gcc -S -o /dev/null hello_world.c 
 	ls -Artla trace*.txt | head -n 1
 
 trace_dbg : hook.so
