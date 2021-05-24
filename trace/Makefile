@@ -43,6 +43,12 @@ trace3 : hook.so
 	ls -Artla trace*.txt | head -n 1
 	mv trace*.txt trace3_bash_hello.txt
 
+trace4 : hook.so
+	-rm trace*.txt
+	LD_PRELOAD=./hook.so bash -c 'for i in {1..100} ; do echo $$i ; done'
+	ls -Artla trace*.txt | head -n 1
+	mv trace*.txt trace4_bash_loop.txt
+
 trace_dbg : hook.so
 	-rm trace*.txt
 	LD_PRELOAD=./hook.so LD_DEBUG=libs,files g++ -S -o /dev/null trace2timeline.cc
