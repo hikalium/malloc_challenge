@@ -21,13 +21,9 @@ r <begin_addr> <end_addr>
 */
 void trace_op(char op, int64_t addr, int64_t size) {
   // Trace addr < 0x1'0000'0000LL ops only to ease visualization
-  if(addr >= 0x1'0000'0000LL) return;
   fprintf(trace_fp, "%c %ld %ld\n", op, addr, size);
   range_begin = std::min(range_begin, addr);
   range_end = std::max(range_end, addr + size);
-}
-void finalize_trace() {
-  fprintf(trace_fp, "r %ld %ld\n", range_begin, range_end);
 }
 
 void record_alloc(int64_t addr, int64_t size) {
@@ -105,6 +101,5 @@ int main() {
           range_end);
   fprintf(stderr, "range_size: %ld\n",
           range_end - range_begin);
-  finalize_trace();
   return 0;
 }

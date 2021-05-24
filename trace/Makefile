@@ -7,7 +7,7 @@ default: hook.so trace2timeline.bin alloc_free_seq.bin
 	g++ -Wall -Wpedantic -o $@ $*.cc
 
 %.bin : %.c Makefile
-	gcc -Wall -Wpedantic -o $@ $*.c
+	gcc -Wall -Wpedantic -static -o $@ $*.c
 
 %.dat : %.txt trace2timeline.bin Makefile
 	cat $*.txt | ./trace2timeline.bin > $@
@@ -36,6 +36,12 @@ trace2 : hook.so
 	-rm trace*.txt
 	LD_PRELOAD=./hook.so gcc -S -o /dev/null hello_world.c 
 	ls -Artla trace*.txt | head -n 1
+
+trace3 : hook.so
+	-rm trace*.txt
+	LD_PRELOAD=./hook.so bash -c "echo hello"
+	ls -Artla trace*.txt | head -n 1
+	mv trace*.txt trace3_bash_hello.txt
 
 trace_dbg : hook.so
 	-rm trace*.txt
