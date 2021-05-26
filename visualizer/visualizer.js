@@ -19,7 +19,6 @@ function drawPixels(pixels, hsegments) {
   console.assert(pixels.length > 0);
   const w = hsegments;
   const h = Math.ceil(pixels.length / w);
-  if (h > 512) return;
   const backedCanvas = document.querySelector('#backedCanvas');
   backedCanvas.width = w;
   backedCanvas.height = h;
@@ -39,49 +38,264 @@ function drawPixels(pixels, hsegments) {
   const canvas = document.querySelector('#mainCanvas');
   const r = window.innerWidth / w;
   canvas.width = window.innerWidth;
-  canvas.height = r * h;
+  canvas.height = Math.min(Math.max(r, 3), 8192 / h) * h;
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
-  ctx.scale(r, r);
+  ctx.scale(r, canvas.height / h);
   ctx.drawImage(backedCanvas, 0, 0);
 }
 
-function drawPixelsFromTrace(begin, end, ops, hsegments) {
-  const pixels = Array.from({length: end - begin}, (e, i) => ((i / 4096) & 1));
-  for (const e of ops) {
+function drawPixelsFromTrace(begin, end, ops, hsegments, endIndex) {
+  const pixels = Array.from({length: end - begin}, (e, i) => 0);
+  for (let i = 0; i < ops.length; i++) {
+    if (i >= endIndex) break;
+    const e = ops[i];
     if (e[0] == 'a') {
-      for (let i = e[1]; i < e[2]; i++) {
-        pixels[i] = 4;
+      for (let i = e[1]; i < e[1] + e[2]; i++) {
+        pixels[i - begin] = 4;
+      }
+    }
+    if (e[0] == 'f') {
+      for (let i = e[1]; i < e[1] + e[2]; i++) {
+        pixels[i - begin] = 1;
       }
     }
   }
   drawPixels(pixels, hsegments);
 }
 
-// r <begin_addr> <end_addr>: range
+const hsegments = document.querySelector('#hsegments');
+hsegments.addEventListener('input', (event) => {
+  drawVisualizer();
+});
+
+const progress = document.querySelector('#progress');
+progress.addEventListener('input', (event) => {
+  drawVisualizer();
+});
+
+function loadData(input) {
+  const ops = input.split('\n')
+                  .map(s => s.trim())
+                  .filter(e => e.length > 0)
+                  .map(s => s.split(' '))
+                  .filter(e => e.length == 3)
+                  .map(e => [e[0], parseInt(e[1], 10), parseInt(e[2], 10)]);
+  let range_begin = Number.POSITIVE_INFINITY;
+  let range_end = 0;
+  const stat_allocated_acc = [0];
+  const stat_freed_acc = [0];
+  const stat_allocated_labels = [0];
+  let count = 1;
+  let allocated_acc = 0;
+  let freed_acc = 0;
+  for (const e of ops) {
+    range_begin = Math.min(range_begin, e[1]);
+    range_end = Math.max(range_end, e[1] + e[2]);
+    if (e[0] == 'a') {
+      allocated_acc += e[2];
+    }
+    if (e[0] == 'f') {
+      freed_acc += e[2];
+    }
+    stat_allocated_labels.push(count);
+    stat_allocated_acc.push(allocated_acc);
+    stat_freed_acc.push(freed_acc);
+    count++;
+  }
+  console.assert(range_begin <= range_end);
+  console.log(`[${range_begin}, ${range_end})`);
+
+  if (window.malloc_trace) {
+    window.malloc_trace.chart.destroy();
+  }
+
+  window.malloc_trace = {};
+  window.malloc_trace.ops = ops;
+  window.malloc_trace.range_begin = range_begin;
+  window.malloc_trace.range_end = range_end;
+
+  progress.max = ops.length;
+
+  drawVisualizer(256);
+
+  // chart
+  const data = {
+    labels: stat_allocated_labels,
+    datasets: [
+      {
+        label: 'allocated_acc',
+        backgroundColor: 'rgb(255, 99, 132)',
+        borderColor: 'rgb(255, 99, 132)',
+        data: stat_allocated_acc,
+      },
+      {
+        label: 'freed_acc',
+        backgroundColor: 'rgb(255, 99, 132)',
+        borderColor: 'rgb(255, 99, 132)',
+        data: stat_freed_acc,
+      }
+    ]
+  };
+  const config = {
+    type: 'line',
+    data,
+    options: {
+      animation: false,
+      showLine: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {tooltip: {enabled: false}}
+    }
+  };
+  const chartCanvas = document.getElementById('chart');
+  chartCanvas.height = 200;
+  window.malloc_trace.chart =
+      new Chart(document.getElementById('chart'), config);
+}
+
+function drawVisualizer() {
+  const t = window.malloc_trace;
+  drawPixelsFromTrace(
+      t.range_begin, t.range_end, t.ops, Math.pow(2, hsegments.value),
+      progress.value);
+}
+
+const handleFileSelect =
+    async (evt) => {
+  evt.stopPropagation();
+  evt.preventDefault();
+  var files = evt.dataTransfer.files;
+  var output = [];
+  for (var i = 0, f; f = files[i]; i++) {
+    var r = new FileReader();
+    r.onload = ((file) => {
+      return async (e) => {
+        var a = await file.text();
+        loadData(a);
+      }
+    })(f);
+    r.readAsArrayBuffer(f);
+  }
+}
+
+function handleDragOver(evt) {
+  evt.stopPropagation();
+  evt.preventDefault();
+  evt.dataTransfer.dropEffect = 'copy';  // Explicitly show this is a copy.
+}
+
 // a <begin_addr> <end_addr>: alloc
+// r <begin_addr> <end_addr>: range
 
 const input = `
-r 0 16384
-a 128 2048
+  a 41538208 336
+  a 41538560 4064
+  a 41542640 4064
+  a 41546720 48
+  a 41546784 208
+  a 41547008 48
+  a 41547072 312
+  a 41547392 48
+  a 41547456 312
+  a 41547776 48
+  a 41547840 208
+  a 41548064 48
+  a 41548128 312
+  a 41548448 48
+  a 41548512 312
+  a 41548832 48
+  a 41548896 208
+  a 41549120 48
+  a 41549184 312
+  a 41549504 48
+  a 41549568 312
+  a 41549888 1040
+  a 41550944 208
+  a 41551168 48
+  a 41551232 208
+  a 41551456 48
+  a 41551520 312
+  a 41551840 48
+  a 41551904 312
+  a 41552224 72704
+  a 41624944 5
+  f 41624944 5
+  a 41624976 120
+  a 41624944 12
+  a 41625104 776
+  a 41625888 112
+  a 41626016 1336
+  a 41627360 216
+  a 41627584 432
+  a 41628032 104
+  a 41628144 88
+  a 41628240 120
+  a 41628368 168
+  a 41628544 104
+  a 41628656 80
+  a 41628752 192
+  a 41628960 12
+  a 41628992 171
+  a 41629184 12
+  a 41629216 181
+  f 41628992 171
+  a 41629408 30
+  a 41629456 6
+  a 41629488 51
+  f 41629488 51
+  a 41629552 472
+  a 41630032 4096
+  a 41634144 1600
+  a 41635760 1024
+  f 41635760 1024
+  a 41635760 2048
+  f 41630032 4096
+  f 41629552 472
+  a 41630032 5
+  a 41629488 56
+  a 41630064 168
+  a 41630240 51
+  a 41630304 104
+  a 41630416 45
+  a 41630480 72
+  a 41630560 42
+  a 41630624 56
+  a 41630688 51
+  a 41630752 56
+  a 41630816 51
+  f 41630816 51
+  a 41630816 54
+  a 41630880 72
+  a 41630960 51
+  f 41630960 51
+  a 41630960 54
+  f 41630960 54
+  a 41630960 51
+  f 41630960 51
+  a 41630960 51
+  f 41630960 51
+  a 41630960 48
+  a 41631024 72
+  a 41631104 42
+  f 41631104 42
+  a 41631168 57
+  a 41631248 72
+  a 41631104 51
+  f 41631104 51
+  a 41631328 57
+  f 41631328 57
+  a 41631104 51
+  f 41631104 51
+  a 41631104 51
+  f 41631104 51
+
 `;
-const ops = input.split('\n')
-                .map(s => s.trim())
-                .filter(e => e.length > 0)
-                .map(s => s.split(' '))
-                .filter(e => e.length == 3)
-                .map(e => [e[0], parseInt(e[1]), parseInt(e[2])]);
-const range = ops.shift();
-console.assert(range[0] == 'r');
-const range_begin = range[1];
-const range_end = range[2];
-console.assert(range_begin <= range_end);
 
-const hsegments = document.querySelector('#hsegments');
-hsegments.addEventListener(
-    'input',
-    (event) => {drawPixelsFromTrace(
-        range_begin, range_end, ops, Math.pow(2, hsegments.value))});
+loadData(input);
 
-drawPixelsFromTrace(range_begin, range_end, ops, 32)
+
+const dropZone = document.getElementById('fileDropZone');
+dropZone.addEventListener('dragover', handleDragOver, false);
+dropZone.addEventListener('drop', handleFileSelect, false);
 
