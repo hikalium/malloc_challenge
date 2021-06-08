@@ -36,5 +36,5 @@ void my_finalize() {
 
 void test() {
   // Implement here!
-  assert(1 == 1); /* 1 is 1. That's always true! */
+  assert(1 == 1); /* 1 is 1. That's always true! (You can remove this.) */
 }
