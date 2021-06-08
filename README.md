@@ -1,3 +1,3 @@
 # malloc_challenge
 
-[malloc.c](./malloc.c) is a body of malloc.
+- `visualizer/` contains a visualizer of malloc traces.
