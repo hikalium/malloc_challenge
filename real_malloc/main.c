@@ -88,7 +88,7 @@ void test();
 typedef struct object_t {
   void *ptr;
   size_t size;
-  char tag; // A tag to check the object is not broken.
+  char tag;  // A tag to check the object is not broken.
 } object_t;
 
 typedef struct vector_t {
@@ -196,18 +196,28 @@ typedef struct stats_t {
 } stats_t;
 
 stats_t stats;
+FILE *trace_fp;
 
 // Run one challenge.
 // |min_size|: The min size of an allocated object
 // |max_size|: The max size of an allocated object
 // |*_func|: Function pointers to initialize / malloc / free.
-void run_challenge(size_t min_size, size_t max_size,
-                   initialize_func_t initialize_func, malloc_func_t malloc_func,
-                   free_func_t free_func, finalize_func_t finalize_func) {
+void run_challenge(const char *trace_file_name, size_t min_size,
+                   size_t max_size, initialize_func_t initialize_func,
+                   malloc_func_t malloc_func, free_func_t free_func,
+                   finalize_func_t finalize_func) {
+  trace_fp = NULL;
+  if (trace_file_name) {
+    trace_fp = fopen(trace_file_name, "wb");
+    if (!trace_fp) {
+      fprintf(stderr, "Failed to open a trace file: %s\n", trace_file_name);
+      exit(EXIT_FAILURE);
+    }
+  }
   const int cycles = 10;
-  const int epochs_per_cycle = 100;
-  const int objects_per_epoch_small = 100;
-  const int objects_per_epoch_large = 2000;
+  const int epochs_per_cycle = 20;
+  const int objects_per_epoch_small = 50;
+  const int objects_per_epoch_large = 250;
   char tag = 0;
   // The last entry of the vector is used to store objects that are never freed.
   vector_t *objects[epochs_per_cycle + 1];
@@ -236,6 +246,9 @@ void run_challenge(size_t min_size, size_t max_size,
         stats.allocated_size += size;
         allocated += size;
         void *ptr = malloc_func(size);
+        if (trace_fp) {
+          fprintf(trace_fp, "a %lld %ld\n", (uint64_t)ptr, size);
+        }
         memset(ptr, tag, size);
         object_t object = {ptr, size, tag};
         tag++;
@@ -265,6 +278,9 @@ void run_challenge(size_t min_size, size_t max_size,
           assert(0);
         }
         free_func(object.ptr);
+        if (trace_fp) {
+          fprintf(trace_fp, "f %lld %ld\n", (uint64_t)object.ptr, object.size);
+        }
       }
 
 #if 0
@@ -287,6 +303,7 @@ void run_challenge(size_t min_size, size_t max_size,
     vector_destroy(objects[i]);
   }
   finalize_func();
+  fclose(trace_fp);
 }
 
 // Print stats
@@ -308,46 +325,51 @@ void run_challenges() {
   stats_t simple_stats, my_stats;
 
   // Warm up run.
-  run_challenge(128, 128, simple_initialize, simple_malloc, simple_free,
+  run_challenge(NULL, 128, 128, simple_initialize, simple_malloc, simple_free,
                 simple_finalize);
 
   // Challenge 1:
-  run_challenge(128, 128, simple_initialize, simple_malloc, simple_free,
-                simple_finalize);
+  run_challenge("trace1_simple.txt", 128, 128, simple_initialize, simple_malloc,
+                simple_free, simple_finalize);
   simple_stats = stats;
-  run_challenge(128, 128, my_initialize, my_malloc, my_free, my_finalize);
+  run_challenge("trace1_my.txt", 128, 128, my_initialize, my_malloc, my_free,
+                my_finalize);
   my_stats = stats;
   print_stats("Challenge 1", simple_stats, my_stats);
 
   // Challenge 2:
-  run_challenge(16, 16, simple_initialize, simple_malloc, simple_free,
-                simple_finalize);
+  run_challenge("trace2_simple.txt", 16, 16, simple_initialize, simple_malloc,
+                simple_free, simple_finalize);
   simple_stats = stats;
-  run_challenge(16, 16, my_initialize, my_malloc, my_free, my_finalize);
+  run_challenge("trace2_my.txt", 16, 16, my_initialize, my_malloc, my_free,
+                my_finalize);
   my_stats = stats;
   print_stats("Challenge 2", simple_stats, my_stats);
 
   // Challenge 3:
-  run_challenge(16, 128, simple_initialize, simple_malloc, simple_free,
-                simple_finalize);
+  run_challenge("trace3_simple.txt", 16, 128, simple_initialize, simple_malloc,
+                simple_free, simple_finalize);
   simple_stats = stats;
-  run_challenge(16, 128, my_initialize, my_malloc, my_free, my_finalize);
+  run_challenge("trace3_my.txt", 16, 128, my_initialize, my_malloc, my_free,
+                my_finalize);
   my_stats = stats;
   print_stats("Challenge 3", simple_stats, my_stats);
 
   // Challenge 4:
-  run_challenge(256, 4000, simple_initialize, simple_malloc, simple_free,
-                simple_finalize);
+  run_challenge("trace4_simple.txt", 256, 4000, simple_initialize,
+                simple_malloc, simple_free, simple_finalize);
   simple_stats = stats;
-  run_challenge(256, 4000, my_initialize, my_malloc, my_free, my_finalize);
+  run_challenge("trace4_my.txt", 256, 4000, my_initialize, my_malloc, my_free,
+                my_finalize);
   my_stats = stats;
   print_stats("Challenge 4", simple_stats, my_stats);
 
   // Challenge 5:
-  run_challenge(8, 4000, simple_initialize, simple_malloc, simple_free,
-                simple_finalize);
+  run_challenge("trace5_simple.txt", 8, 4000, simple_initialize, simple_malloc,
+                simple_free, simple_finalize);
   simple_stats = stats;
-  run_challenge(8, 4000, my_initialize, my_malloc, my_free, my_finalize);
+  run_challenge("trace5_my.txt", 8, 4000, my_initialize, my_malloc, my_free,
+                my_finalize);
   my_stats = stats;
   print_stats("Challenge 5", simple_stats, my_stats);
 }
@@ -374,7 +396,7 @@ void munmap_to_system(void *ptr, size_t size) {
 }
 
 int main(int argc, char **argv) {
-  srand(12); // Set the rand seed to make the challenges non-deterministic.
+  srand(12);  // Set the rand seed to make the challenges non-deterministic.
   test();
   run_challenges();
   return 0;

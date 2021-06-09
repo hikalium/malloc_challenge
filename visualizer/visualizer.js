@@ -185,9 +185,6 @@ function handleDragOver(evt) {
   evt.dataTransfer.dropEffect = 'copy';  // Explicitly show this is a copy.
 }
 
-// a <begin_addr> <end_addr>: alloc
-// r <begin_addr> <end_addr>: range
-
 const input = `
   a 41538208 336
   a 41538560 4064
