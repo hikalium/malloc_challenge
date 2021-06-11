@@ -1,4 +1,4 @@
-CFLAGS=-Wall -O3
+CFLAGS=-Wall -O3 -lm
 SRCS=main.c malloc.c simple_malloc.c
 
 malloc_challenge.bin : ${SRCS} Makefile
