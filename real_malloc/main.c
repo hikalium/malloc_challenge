@@ -155,6 +155,7 @@ void run_challenge(const char *trace_file_name, size_t min_size,
                    malloc_func_t malloc_func, free_func_t free_func,
                    finalize_func_t finalize_func) {
   trace_fp = NULL;
+#ifdef ENABLE_MALLOC_TRACE
   if (trace_file_name) {
     trace_fp = fopen(trace_file_name, "wb");
     if (!trace_fp) {
@@ -162,10 +163,11 @@ void run_challenge(const char *trace_file_name, size_t min_size,
       exit(EXIT_FAILURE);
     }
   }
+#endif
   const int cycles = 10;
-  const int epochs_per_cycle = 20;
-  const int objects_per_epoch_small = 50;
-  const int objects_per_epoch_large = 250;
+  const int epochs_per_cycle = 100;
+  const int objects_per_epoch_small = 100;
+  const int objects_per_epoch_large = 2000;
   char tag = 0;
   // The last entry of the vector is used to store objects that are never freed.
   vector_t *objects[epochs_per_cycle + 1];
