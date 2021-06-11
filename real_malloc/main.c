@@ -163,10 +163,12 @@ void run_challenge(const char *trace_file_name, size_t min_size,
       exit(EXIT_FAILURE);
     }
   }
-  const int epochs_per_cycle = 20;
-  const int objects_per_epoch_small = 50;
-  const int objects_per_epoch_large = 250;
-  printf("!!! WARNING - MALLOC_TRACE is enabled. The result will be different compare to normal builds\n");
+  const int epochs_per_cycle = 10;
+  const int objects_per_epoch_small = 25;
+  const int objects_per_epoch_large = 50;
+  printf(
+      "!!! WARNING - MALLOC_TRACE is enabled. The result will be different "
+      "compare to normal builds\n");
 #else
   const int epochs_per_cycle = 100;
   const int objects_per_epoch_small = 100;
@@ -337,6 +339,9 @@ void *mmap_from_system(size_t size) {
   void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   assert(ptr);
+  if (trace_fp) {
+    fprintf(trace_fp, "m %lld %ld\n", (uint64_t)ptr, size);
+  }
   return ptr;
 }
 
@@ -347,6 +352,9 @@ void munmap_to_system(void *ptr, size_t size) {
   assert((uintptr_t)(ptr) % 4096 == 0);
   stats.munmap_size += size;
   int ret = munmap(ptr, size);
+  if (trace_fp) {
+    fprintf(trace_fp, "u %lld %ld\n", (uint64_t)ptr, size);
+  }
   assert(ret != -1);
 }
 

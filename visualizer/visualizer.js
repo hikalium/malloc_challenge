@@ -57,7 +57,17 @@ function drawPixelsFromTrace(begin, end, ops, hsegments, endIndex) {
     }
     if (e[0] == 'f') {
       for (let i = e[1]; i < e[1] + e[2]; i++) {
-        pixels[i - begin] = 1;
+        pixels[i - begin] = 2;
+      }
+    }
+    if (e[0] == 'm') {
+      for (let i = e[1]; i < e[1] + e[2]; i++) {
+        pixels[i - begin] = 2;
+      }
+    }
+    if (e[0] == 'u') {
+      for (let i = e[1]; i < e[1] + e[2]; i++) {
+        pixels[i - begin] = 0;
       }
     }
   }
