@@ -163,11 +163,16 @@ void run_challenge(const char *trace_file_name, size_t min_size,
       exit(EXIT_FAILURE);
     }
   }
-#endif
-  const int cycles = 10;
+  const int epochs_per_cycle = 20;
+  const int objects_per_epoch_small = 50;
+  const int objects_per_epoch_large = 250;
+  printf("!!! WARNING - MALLOC_TRACE is enabled. The result will be different compare to normal builds\n");
+#else
   const int epochs_per_cycle = 100;
   const int objects_per_epoch_small = 100;
   const int objects_per_epoch_large = 2000;
+#endif
+  const int cycles = 10;
   char tag = 0;
   // The last entry of the vector is used to store objects that are never freed.
   vector_t *objects[epochs_per_cycle + 1];
