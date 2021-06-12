@@ -13,6 +13,9 @@ run : malloc_challenge.bin
 run_trace : malloc_challenge_with_trace.bin
 	./malloc_challenge_with_trace.bin
 
+run_valgrind : malloc_challenge_with_trace.bin
+	valgrind ./malloc_challenge_with_trace.bin
+
 clean :
 	-rm *.txt
 	-rm *.bin
