@@ -14,7 +14,8 @@
 //      challenge, |size| is guaranteed to be a multiple of 8 bytes and meets
 //      8 <= size <= 4000.
 //   * my_free(ptr) is called every time an object is freed.
-//   * Additionally, my_finalize() is called only once at the end of each challenge,
+//   * Additionally, my_finalize() is called only once at the end of each
+//   challenge,
 //     so you can use this function for doing some clean ups if you want.
 // 2. The only library functions you can use in my_malloc() and my_free() are
 //    mmap_from_system() and munmap_to_system().

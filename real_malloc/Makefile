@@ -1,11 +1,11 @@
-CFLAGS=-Wall -O3 -lm
+CFLAGS=-Wall -O3 -g -lm
 SRCS=main.c malloc.c simple_malloc.c
 
 malloc_challenge.bin : ${SRCS} Makefile
-	$(CC) $(CFLAGS) -o $@ $(SRCS)
+	$(CC) -o $@ $(SRCS) $(CFLAGS)
 
 malloc_challenge_with_trace.bin : ${SRCS} Makefile
-	$(CC) $(CFLAGS) -DENABLE_MALLOC_TRACE -o $@ $(SRCS)
+	$(CC) -DENABLE_MALLOC_TRACE -o $@ $(SRCS) $(CFLAGS)
 
 run : malloc_challenge.bin
 	./malloc_challenge.bin
@@ -14,7 +14,8 @@ run_trace : malloc_challenge_with_trace.bin
 	./malloc_challenge_with_trace.bin
 
 clean :
-	-rm malloc_challenge.bin
+	-rm *.txt
+	-rm *.bin
 
 commit :
 	clang-format -i *.c

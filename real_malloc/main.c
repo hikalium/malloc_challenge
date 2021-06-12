@@ -36,7 +36,7 @@ void test();
 typedef struct object_t {
   void *ptr;
   size_t size;
-  char tag;  // A tag to check the object is not broken.
+  char tag; // A tag to check the object is not broken.
 } object_t;
 
 typedef struct vector_t {
@@ -166,9 +166,8 @@ void run_challenge(const char *trace_file_name, size_t min_size,
   const int epochs_per_cycle = 10;
   const int objects_per_epoch_small = 25;
   const int objects_per_epoch_large = 50;
-  printf(
-      "!!! WARNING - MALLOC_TRACE is enabled. The result will be different "
-      "compare to normal builds\n");
+  printf("!!! WARNING - MALLOC_TRACE is enabled. The result will be different "
+         "compare to normal builds\n");
 #else
   const int epochs_per_cycle = 100;
   const int objects_per_epoch_small = 100;
@@ -236,7 +235,8 @@ void run_challenge(const char *trace_file_name, size_t min_size,
         }
         free_func(object.ptr);
         if (trace_fp) {
-          fprintf(trace_fp, "f %llu %ld\n", (unsigned long long)object.ptr, object.size);
+          fprintf(trace_fp, "f %llu %ld\n", (unsigned long long)object.ptr,
+                  object.size);
         }
       }
 
@@ -260,7 +260,10 @@ void run_challenge(const char *trace_file_name, size_t min_size,
     vector_destroy(objects[i]);
   }
   finalize_func();
-  fclose(trace_fp);
+  if (trace_fp) {
+    fclose(trace_fp);
+    trace_fp = NULL;
+  }
 }
 
 // Print stats
@@ -359,7 +362,7 @@ void munmap_to_system(void *ptr, size_t size) {
 }
 
 int main(int argc, char **argv) {
-  srand(12);  // Set the rand seed to make the challenges non-deterministic.
+  srand(12); // Set the rand seed to make the challenges non-deterministic.
   test();
   run_challenges();
   return 0;

@@ -150,4 +150,3 @@ void simple_free(void *ptr) {
 }
 
 void simple_finalize() {}
-
