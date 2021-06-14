@@ -33,3 +33,5 @@ commit :
 	git add .
 	git commit
 
+dump_env :
+	$(CC) --version
