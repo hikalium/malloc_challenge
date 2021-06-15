@@ -93,23 +93,37 @@ function loadData(input) {
                   .map(e => [e[0], parseInt(e[1], 10), parseInt(e[2], 10)]);
   let range_begin = Number.POSITIVE_INFINITY;
   let range_end = 0;
+  const stat_allocated_now = [0];
   const stat_allocated_acc = [0];
+  const stat_mapped_now = [0];
   const stat_freed_acc = [0];
   const stat_allocated_labels = [0];
   let count = 1;
   let allocated_acc = 0;
+  let allocated_now = 0;
+  let mapped_now = 0;
   let freed_acc = 0;
   for (const e of ops) {
     range_begin = Math.min(range_begin, e[1]);
     range_end = Math.max(range_end, e[1] + e[2]);
     if (e[0] == 'a') {
       allocated_acc += e[2];
+      allocated_now += e[2];
     }
     if (e[0] == 'f') {
       freed_acc += e[2];
+      allocated_now -= e[2];
+    }
+    if (e[0] == 'm') {
+      mapped_now += e[2];
+    }
+    if (e[0] == 'u') {
+      mapped_now -= e[2];
     }
     stat_allocated_labels.push(count);
+    stat_allocated_now.push(allocated_now);
     stat_allocated_acc.push(allocated_acc);
+    stat_mapped_now.push(mapped_now);
     stat_freed_acc.push(freed_acc);
     count++;
   }
@@ -134,16 +148,18 @@ function loadData(input) {
     labels: stat_allocated_labels,
     datasets: [
       {
-        label: 'allocated_acc',
-        backgroundColor: 'rgb(255, 99, 132)',
-        borderColor: 'rgb(255, 99, 132)',
-        data: stat_allocated_acc,
+        label: 'allocated_now',
+        backgroundColor: '#03af7a',
+        borderColor: '#03af7a',
+        data: stat_allocated_now,
+        fill: 'origin',
       },
       {
-        label: 'freed_acc',
-        backgroundColor: 'rgb(255, 99, 132)',
-        borderColor: 'rgb(255, 99, 132)',
-        data: stat_freed_acc,
+        label: 'mapped_now',
+        backgroundColor: '#4dc4ff',
+        borderColor: '#4dc4ff',
+        data: stat_mapped_now,
+        fill: 'origin',
       }
     ]
   };
@@ -152,10 +168,18 @@ function loadData(input) {
     data,
     options: {
       animation: false,
-      showLine: false,
+      pointRadius: 0,
+      showLine: true,
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {tooltip: {enabled: false}}
+      plugins: {tooltip: {enabled: false}},
+      scales: {
+        x: {display: true, title: {display: true, text: 'progress'}},
+        y: {
+          display: true,
+          title: {display: true, text: 'Bytes'},
+        }
+      }
     }
   };
   const chartCanvas = document.getElementById('chart');
@@ -196,107 +220,15 @@ function handleDragOver(evt) {
 }
 
 const input = `
-  a 41538208 336
-  a 41538560 4064
-  a 41542640 4064
-  a 41546720 48
-  a 41546784 208
-  a 41547008 48
-  a 41547072 312
-  a 41547392 48
-  a 41547456 312
-  a 41547776 48
-  a 41547840 208
-  a 41548064 48
-  a 41548128 312
-  a 41548448 48
-  a 41548512 312
-  a 41548832 48
-  a 41548896 208
-  a 41549120 48
-  a 41549184 312
-  a 41549504 48
-  a 41549568 312
-  a 41549888 1040
-  a 41550944 208
-  a 41551168 48
-  a 41551232 208
-  a 41551456 48
-  a 41551520 312
-  a 41551840 48
-  a 41551904 312
-  a 41552224 72704
-  a 41624944 5
-  f 41624944 5
-  a 41624976 120
-  a 41624944 12
-  a 41625104 776
-  a 41625888 112
-  a 41626016 1336
-  a 41627360 216
-  a 41627584 432
-  a 41628032 104
-  a 41628144 88
-  a 41628240 120
-  a 41628368 168
-  a 41628544 104
-  a 41628656 80
-  a 41628752 192
-  a 41628960 12
-  a 41628992 171
-  a 41629184 12
-  a 41629216 181
-  f 41628992 171
-  a 41629408 30
-  a 41629456 6
-  a 41629488 51
-  f 41629488 51
-  a 41629552 472
-  a 41630032 4096
-  a 41634144 1600
-  a 41635760 1024
-  f 41635760 1024
-  a 41635760 2048
-  f 41630032 4096
-  f 41629552 472
-  a 41630032 5
-  a 41629488 56
-  a 41630064 168
-  a 41630240 51
-  a 41630304 104
-  a 41630416 45
-  a 41630480 72
-  a 41630560 42
-  a 41630624 56
-  a 41630688 51
-  a 41630752 56
-  a 41630816 51
-  f 41630816 51
-  a 41630816 54
-  a 41630880 72
-  a 41630960 51
-  f 41630960 51
-  a 41630960 54
-  f 41630960 54
-  a 41630960 51
-  f 41630960 51
-  a 41630960 51
-  f 41630960 51
-  a 41630960 48
-  a 41631024 72
-  a 41631104 42
-  f 41631104 42
-  a 41631168 57
-  a 41631248 72
-  a 41631104 51
-  f 41631104 51
-  a 41631328 57
-  f 41631328 57
-  a 41631104 51
-  f 41631104 51
-  a 41631104 51
-  f 41631104 51
-
+  m 0 400
+  a 0 100
+  a 100 100
+  a 200 100
+  a 300 100
+  f 0 100
+  f 100 100
+  f 200 100
+  f 300 100
 `;
 
 loadData(input);
