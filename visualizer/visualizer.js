@@ -229,6 +229,7 @@ const input = `
   f 100 100
   f 200 100
   f 300 100
+  u 0 400
 `;
 
 loadData(input);
