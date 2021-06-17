@@ -233,11 +233,11 @@ void run_challenge(const char *trace_file_name, size_t min_size,
           printf("An allocated object is broken!");
           assert(0);
         }
-        free_func(object.ptr);
         if (trace_fp) {
           fprintf(trace_fp, "f %llu %ld\n", (unsigned long long)object.ptr,
                   object.size);
         }
+        free_func(object.ptr);
       }
 
 #if 0
