@@ -45,6 +45,8 @@ function drawPixels(pixels, hsegments) {
   ctx.drawImage(backedCanvas, 0, 0);
 }
 
+const progressSpan = document.querySelector('#progressSpan');
+const hsegmentsSpan = document.querySelector('#hsegmentsSpan');
 function drawPixelsFromTrace(begin, end, ops, hsegments, endIndex) {
   const pixels = Array.from({length: end - begin}, (e, i) => 0);
   for (let i = 0; i < ops.length; i++) {
@@ -72,6 +74,8 @@ function drawPixelsFromTrace(begin, end, ops, hsegments, endIndex) {
     }
   }
   drawPixels(pixels, hsegments);
+  progressSpan.innerText = `${endIndex} / ${ops.length}`;
+  hsegmentsSpan.innerText = `${hsegments} bytes`;
 }
 
 const hsegments = document.querySelector('#hsegments');
