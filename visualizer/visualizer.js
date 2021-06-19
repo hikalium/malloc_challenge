@@ -1,3 +1,4 @@
+const opsPerSecInput = document.getElementById('opsPerSec');
 // Pixels value:
 // 0: not allocated nor mapped (light)
 // 1: not allocated nor mapped (dark)
@@ -36,8 +37,8 @@ function drawPixels(pixels, hsegments) {
   backedContext.putImageData(backedImageData, 0, 0);
 
   const canvas = document.querySelector('#mainCanvas');
-  const r = window.innerWidth / w;
-  canvas.width = window.innerWidth;
+  canvas.width = canvas.offsetWidth;
+  const r = canvas.width / w;
   canvas.height = Math.min(Math.max(r, 3), 8192 / h) * h;
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
@@ -144,6 +145,7 @@ function loadData(input) {
   window.malloc_trace.range_end = range_end;
 
   progress.max = ops.length;
+  opsPerSecInput.value = Math.ceil(ops.length / 5);
 
   drawVisualizer(256);
 
@@ -243,3 +245,24 @@ const dropZone = document.getElementById('fileDropZone');
 dropZone.addEventListener('dragover', handleDragOver, false);
 dropZone.addEventListener('drop', handleFileSelect, false);
 
+let intervalTimer;
+const progressNext = () => {
+    progress.value++;
+    drawVisualizer();
+    if(progress.value == progress.max) {
+      clearInterval(intervalTimer);
+    }
+};
+document.getElementById("startButton").addEventListener('click', () => {
+  intervalTimer = setInterval(progressNext, 1000/opsPerSecInput.value);
+}, false);
+document.getElementById("stopButton").addEventListener('click', () => {
+  clearInterval(intervalTimer);
+}, false);
+function sleep(milliseconds) {
+  const date = Date.now();
+  let currentDate = null;
+  do {
+    currentDate = Date.now();
+  } while (currentDate - date < milliseconds);
+}
