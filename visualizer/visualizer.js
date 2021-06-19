@@ -1,4 +1,5 @@
 const opsPerSecInput = document.getElementById('opsPerSec');
+const utilizationSpan = document.getElementById('utilizationSpan');
 // Pixels value:
 // 0: not allocated nor mapped (light)
 // 1: not allocated nor mapped (dark)
@@ -50,25 +51,31 @@ const progressSpan = document.querySelector('#progressSpan');
 const hsegmentsSpan = document.querySelector('#hsegmentsSpan');
 function drawPixelsFromTrace(begin, end, ops, hsegments, endIndex) {
   const pixels = Array.from({length: end - begin}, (e, i) => 0);
+  let allocated = 0;
+  let mapped = 0;
   for (let i = 0; i < ops.length; i++) {
     if (i >= endIndex) break;
     const e = ops[i];
     if (e[0] == 'a') {
+      allocated += e[2];
       for (let i = e[1]; i < e[1] + e[2]; i++) {
         pixels[i - begin] = 4;
       }
     }
     if (e[0] == 'f') {
+      allocated -= e[2];
       for (let i = e[1]; i < e[1] + e[2]; i++) {
         pixels[i - begin] = 2;
       }
     }
     if (e[0] == 'm') {
+      mapped += e[2];
       for (let i = e[1]; i < e[1] + e[2]; i++) {
         pixels[i - begin] = 2;
       }
     }
     if (e[0] == 'u') {
+      mapped -= e[2];
       for (let i = e[1]; i < e[1] + e[2]; i++) {
         pixels[i - begin] = 0;
       }
@@ -77,6 +84,8 @@ function drawPixelsFromTrace(begin, end, ops, hsegments, endIndex) {
   drawPixels(pixels, hsegments);
   progressSpan.innerText = `${endIndex} / ${ops.length}`;
   hsegmentsSpan.innerText = `${hsegments} bytes`;
+  const utilization = allocated/mapped;
+  utilizationSpan.innerText = `${isNaN(utilization) ? 0 : (utilization * 100).toFixed(1)}`
 }
 
 const hsegments = document.querySelector('#hsegments');
