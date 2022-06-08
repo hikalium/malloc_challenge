@@ -27,6 +27,7 @@ run_asan : malloc_challenge_with_asan.bin
 clean :
 	-rm *.txt
 	-rm *.bin
+	-rm -rf *.dSYM
 
 commit :
 	clang-format -i *.c
