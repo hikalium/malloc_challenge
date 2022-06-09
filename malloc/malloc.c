@@ -28,8 +28,8 @@ void my_initialize() {
 }
 
 // my_malloc() is called every time an object is allocated.
-// |size| is guaranteed to be a multiple of 8 bytes and meets 8 <= |size| <= 4000.
-// You are not allowed to use any library functions other than
+// |size| is guaranteed to be a multiple of 8 bytes and meets 8 <= |size| <=
+// 4000. You are not allowed to use any library functions other than
 // mmap_from_system() / munmap_to_system().
 void *my_malloc(size_t size) {
   // Implement here!

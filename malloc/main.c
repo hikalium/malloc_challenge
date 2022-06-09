@@ -295,9 +295,19 @@ void print_stats(int challenge_index, stats_t simple_stats, stats_t my_stats) {
   printf("%16s| %15d => %15d\n", "Time [ms]", simple_time_ms, my_time_ms);
   printf("%16s| %15d => %15d\n", "Utilization [%] ",
          simple_utilization_percentage, my_utilization_percentage);
+
+  my_malloc_time_ms[challenge_index] = my_time_ms;
+  my_malloc_utilization_percentage[challenge_index] = my_utilization_percentage;
 }
 
-void print_score_data() {}
+void print_score_data() {
+  printf("\nChallenge done!\n");
+  printf("Please copy & paste the following data in the score sheet!\n");
+  for (int i = FIRST_CHALLENGE_INDEX; i <= LAST_CHALLENGE_INDEX; i++) {
+    printf("%d,%d,", my_malloc_time_ms[i], my_malloc_utilization_percentage[i]);
+  }
+  printf("\n");
+}
 
 // Run challenges
 void run_challenges() {
@@ -351,6 +361,8 @@ void run_challenges() {
                 my_finalize);
   my_stats = stats;
   print_stats(5, simple_stats, my_stats);
+
+  print_score_data();
 }
 
 // Allocate a memory region from the system. |size| needs to be a multiple of
