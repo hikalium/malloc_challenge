@@ -167,9 +167,6 @@ void run_challenge(const char *trace_file_name, size_t min_size,
   const int epochs_per_cycle = 10;
   const int objects_per_epoch_small = 25;
   const int objects_per_epoch_large = 50;
-  printf(
-      "!!! WARNING - MALLOC_TRACE is enabled. The result will be different "
-      "compare to normal builds\n");
 #else
   const int epochs_per_cycle = 100;
   const int objects_per_epoch_small = 100;
@@ -313,6 +310,12 @@ void print_score_data() {
 void run_challenges() {
   stats_t simple_stats, my_stats;
 
+#ifdef ENABLE_MALLOC_TRACE
+  printf(
+      "!!! WARNING - MALLOC_TRACE is enabled.\n"
+      "The result will be different compare to normal builds.\n");
+#endif
+
   // Warm up run.
   run_challenge(NULL, 128, 128, simple_initialize, simple_malloc, simple_free,
                 simple_finalize);
@@ -362,7 +365,15 @@ void run_challenges() {
   my_stats = stats;
   print_stats(5, simple_stats, my_stats);
 
+#ifdef ENABLE_MALLOC_TRACE
+  printf(
+      "!!! WARNING - MALLOC_TRACE is enabled.\n"
+      "The result will be different compare to normal builds.\n");
+#endif
+
+#ifndef ENABLE_MALLOC_TRACE
   print_score_data();
+#endif
 }
 
 // Allocate a memory region from the system. |size| needs to be a multiple of
