@@ -1,3 +1,10 @@
+//
+// >>>> malloc challenge <<<<
+//
+
+// Your task is to improve utilization and speed of the following malloc
+// implementation.
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -9,15 +16,21 @@
 void *mmap_from_system(size_t size);
 void munmap_to_system(void *ptr, size_t size);
 
-// my_initialize() is called only once at the beginning of each challenge.
+//
+// malloc interfaces
+//
+// DO NOT REMOVE/RENAME FOLLOWING FUNCTIONS!
+// Of course, you can change the code in the functions!
+
+// This is called at the beginning of each challenge.
 void my_initialize() {
   // Implement here!
 }
 
-// my_malloc() is called every time an object is allocated. |size| is guaranteed
-// to be a multiple of 8 bytes and meets 8 <= |size| <= 4000. You are not
-// allowed to use any library functions other than mmap_from_system /
-// munmap_to_system.
+// my_malloc() is called every time an object is allocated.
+// |size| is guaranteed to be a multiple of 8 bytes and meets 8 <= |size| <= 4000.
+// You are not allowed to use any library functions other than
+// mmap_from_system() / munmap_to_system().
 void *my_malloc(size_t size) {
   // Implement here!
   return mmap_from_system(4096);
@@ -30,6 +43,7 @@ void my_free(void *ptr) {
   munmap_to_system(ptr, 4096);
 }
 
+// This is called at the end of each challenge.
 void my_finalize() {
   // Implement here!
 }
