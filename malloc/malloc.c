@@ -50,8 +50,7 @@ void my_add_to_free_list(my_metadata_t *metadata) {
   my_heap.free_head = metadata;
 }
 
-void my_remove_from_free_list(my_metadata_t *metadata,
-                                  my_metadata_t *prev) {
+void my_remove_from_free_list(my_metadata_t *metadata, my_metadata_t *prev) {
   if (prev) {
     prev->next = metadata->next;
   } else {
@@ -84,6 +83,8 @@ void *my_malloc(size_t size) {
     prev = metadata;
     metadata = metadata->next;
   }
+  // now, metadata points to the first free slot
+  // and prev is the previous entry.
 
   if (!metadata) {
     // There was no free slot available. We need to request a new memory region
@@ -95,8 +96,7 @@ void *my_malloc(size_t size) {
     //     <---------------------->
     //            buffer_size
     size_t buffer_size = 4096;
-    my_metadata_t *metadata =
-        (my_metadata_t *)mmap_from_system(buffer_size);
+    my_metadata_t *metadata = (my_metadata_t *)mmap_from_system(buffer_size);
     metadata->size = buffer_size - sizeof(my_metadata_t);
     metadata->next = NULL;
     // Add the memory region to the free list.
