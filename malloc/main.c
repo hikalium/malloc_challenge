@@ -405,6 +405,9 @@ void munmap_to_system(void *ptr, size_t size) {
 
 int main(int argc, char **argv) {
   srand(12);  // Set the rand seed to make the challenges non-deterministic.
+  printf("Welcome to the malloc challenge!\n");
+  printf("size_of(uint8_t *) = %ld\n", sizeof(uint8_t *));
+  printf("size_of(size_t) = %ld\n", sizeof(size_t));
   printf("Running tests...\n");
   test();
   printf("Finished!\n\n");
