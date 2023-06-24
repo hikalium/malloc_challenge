@@ -14,6 +14,7 @@ Your task is implement a better malloc logic in [malloc.c](./malloc/malloc.c) to
 git clone https://github.com/hikalium/malloc_challenge.git
 
 # move into malloc dir
+cd malloc_challenge
 cd malloc
 
 # build
