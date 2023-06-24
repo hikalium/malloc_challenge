@@ -1,11 +1,11 @@
 # malloc_challenge
 
-- `malloc` is the malloc challenge. Please read [malloc/README.md](./malloc/README.md) and [malloc/malloc.c](./malloc/malloc.c) for more information.
+- `malloc` is the malloc challenge. Please read this doc and [malloc/malloc.c](./malloc/malloc.c) for more information.
 - `visualizer/` contains a visualizer of malloc traces.
 
 ## Instruction
 
-Your task is implement a better malloc logic in [malloc.c](malloc/malloc.c) to improve the speed and memory usage.
+Your task is implement a better malloc logic in [malloc.c](./malloc/malloc.c) to improve the speed and memory usage.
 
 ## How to build & run a benchmark
 
