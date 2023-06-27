@@ -31,7 +31,7 @@ typedef struct my_metadata_t {
 } my_metadata_t;
 
 typedef struct my_heap_t {
-  my_metadata_t *free_head;
+  my_metadata_t *free_head;  //なんで下も同じなの....???
   my_metadata_t dummy;
 } my_heap_t;
 
@@ -79,10 +79,32 @@ void *my_malloc(size_t size) {
   my_metadata_t *prev = NULL;
   // First-fit: Find the first free slot the object fits.
   // TODO: Update this logic to Best-fit!
+  //while (metadata && metadata->size < size) {
+  // TODO: minimumのサイズをもつ変数を定義したい
+  my_metadata_t *minimum = my_heap.free_head;  //?????
+
   while (metadata && metadata->size < size) {
-    prev = metadata;
-    metadata = metadata->next;
+    //prev = metadata;
+    //metadata = metadata->next;
+    if (metadata->size < size) {
+      prev = metadata;
+      metadata = metadata->next;
+      continue;
+    }
+    if (metadata->size >= size) {
+      if (metadata->size < minimum->size) {
+        minimum = metadata;
+        prev = metadata;
+        metadata = metadata->next;
+        continue;
+      }else{
+        prev = metadata;
+        metadata = metadata->next;
+        continue;
+      }
+    }
   }
+  metadata = minimum;
   // now, metadata points to the first free slot
   // and prev is the previous entry.
 
