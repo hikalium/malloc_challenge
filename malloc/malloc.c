@@ -112,11 +112,16 @@ void *my_malloc(size_t size) {
   //     metadata   ptr
   void *ptr = metadata + 1;
   size_t remaining_size = metadata->size - size;
-  metadata->size = size;
   // Remove the free slot from the free list.
   my_remove_from_free_list(metadata, prev);
 
   if (remaining_size > sizeof(my_metadata_t)) {
+    // Shrink the metadata for the allocated object
+    // to separate the rest of the region corresponding to remaining_size.
+    // If the remaining_size is not large enough to make a new metadata,
+    // this code path will not be taken and the region will be managed
+    // as a part of the allocated object.
+    metadata->size = size;
     // Create a new metadata for the remaining free slot.
     //
     // ... | metadata | object | metadata | free slot | ...
