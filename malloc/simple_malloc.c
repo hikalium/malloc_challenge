@@ -51,30 +51,30 @@ typedef struct simple_heap_t {
 
 simple_heap_t simple_heap;
 
-// Add a free slot to the beginning of the free list.
+// Add a free slot to the beginning of the free list. 前に追加してる感じ...???
 void simple_add_to_free_list(simple_metadata_t *metadata) {
-  assert(!metadata->next);
-  metadata->next = simple_heap.free_head;
-  simple_heap.free_head = metadata;
+  assert(!metadata->next);  // metadataのnextメンバがNULLであることを確認
+  metadata->next = simple_heap.free_head;  // metadataのnextメンバに、現在のフリーリストの先頭を指すポインタを代入
+  simple_heap.free_head = metadata; // 新しいフリーリストの先頭をmetadataに設定
 }
 
 // Remove a free slot from the free list.
 void simple_remove_from_free_list(simple_metadata_t *metadata,
                                   simple_metadata_t *prev) {
   if (prev) {
-    prev->next = metadata->next;
+    prev->next = metadata->next; //metadataの次のフリースロットへのポインタを、prevのnextメンバに代入。これにより、metadataがフリーリストから削除されます。
   } else {
-    simple_heap.free_head = metadata->next;
+    simple_heap.free_head = metadata->next;//metadataの次のフリースロットへのポインタを、フリーリストの新たな先頭として設定
   }
-  metadata->next = NULL;
+  metadata->next = NULL; //metadataのnextメンバをNULLに設定。これにより、metadataがフリーリストから切り離され、次のフリースロットへの参照が破棄。
 }
 
 // This is called at the beginning of each challenge.
 void simple_initialize() {
-  simple_heap.free_head = &simple_heap.dummy;
+  simple_heap.free_head = &simple_heap.dummy;  //フリーリスト（free list）の先頭を、simple_heap内のdummyというダミーノードに設定。simple_heapは、あるヒープ（メモリ領域）を表す構造体であり、free_headはフリーリストの先頭を指すポインタ
   simple_heap.dummy.size = 0;
   simple_heap.dummy.next = NULL;
-}
+}//ヒープが適切に初期化され、メモリの割り当てや解放が行われる準備が整います
 
 // This is called every time an object is allocated. |size| is guaranteed
 // to be a multiple of 8 bytes and meets 8 <= |size| <= 4000. You are not
@@ -119,7 +119,9 @@ void *simple_malloc(size_t size) {
   // Remove the free slot from the free list.
   simple_remove_from_free_list(metadata, prev);
 
-  if (remaining_size > sizeof(simple_metadata_t)) {
+  if (remaining_size > sizeof(simple_metadata_t)) { //sizeofって何？->sizeとの違いは？
+    // 残りのサイズが新しいメタデータのサイズを持つかどうかを確認する条件分岐です。残りのサイズが新しいメタデータのサイズよりも大きい場合には、新しいメタデータを作成して残りのフリースロットを処理します。??
+    // 余ってるところのmergeをして新しい空間を作るかってことか？？でもfreeじゃないのにいる？
     // Shrink the metadata for the allocated object
     // to separate the rest of the region corresponding to remaining_size.
     // If the remaining_size is not large enough to make a new metadata,
